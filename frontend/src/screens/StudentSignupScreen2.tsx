@@ -15,7 +15,7 @@ import * as DocumentPicker from "expo-document-picker";
 import Checkbox from "expo-checkbox";
 import DropDownPicker from "react-native-dropdown-picker";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import { registerStudent } from "../services/api"; // ✅ Central API import
+import { registerStudent } from "../services/api"; 
 
 export default function StudentSignupScreen2() {
   const navigation = useNavigation<any>();
