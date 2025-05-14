@@ -1,4 +1,4 @@
-// src/routes/sessions.ts
+
 import express, { Request, Response } from 'express';
 import { supabase } from '../supabaseClient';
 
