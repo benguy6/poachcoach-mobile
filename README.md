@@ -8,9 +8,7 @@ Current Features:
 
 Login Page (Authentication via Google not set-up yet)
 
-
 Two step sign-up page for Coaches
-
 
 Two step-sign-up page for Students 
 
