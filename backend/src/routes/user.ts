@@ -36,9 +36,7 @@ const createAuthUser = async (email: string, password: string) => {
   });
 };
 
-// ===========================
-// ✅ Step 1 Signup Routes
-// ===========================
+
 
 router.post('/registerStudentStep1', async (req: Request, res: Response) => {
   const { email } = req.body;
@@ -76,9 +74,6 @@ router.post('/registerCoachStep1', async (req: Request, res: Response) => {
   res.status(200).json({ message: 'Email is available' });
 });
 
-// ===========================
-// 🧑‍🏫 Coach Signup
-// ===========================
 
 router.post('/signup-coach', async (req: Request, res: Response): Promise<void> => {
   const { email, password, first_name, last_name, age, gender, qualifications } = req.body;
@@ -137,9 +132,7 @@ router.post('/signup-coach', async (req: Request, res: Response): Promise<void> 
   res.status(201).json({ message: 'Coach registered successfully' });
 });
 
-// ===========================
-// 👩‍🎓 Student Signup
-// ===========================
+
 
 router.post('/signup-student', async (req: Request, res: Response): Promise<void> => {
   const { email, password, first_name, last_name, age, gender, level_of_expertise } = req.body;
@@ -198,9 +191,6 @@ router.post('/signup-student', async (req: Request, res: Response): Promise<void
   res.status(201).json({ message: 'Student registered successfully' });
 });
 
-// ===========================
-// 🔐 Login
-// ===========================
 
 router.post('/login', async (req: Request, res: Response): Promise<void> => {
   const { email, password } = req.body;
@@ -238,9 +228,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
   });
 });
 
-// ===========================
-// 🔒 Protected route
-// ===========================
+
 
 router.get('/me', verifySupabaseToken, async (req: Request, res: Response): Promise<void> => {
   const userId = req.user?.id;
