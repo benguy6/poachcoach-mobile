@@ -7,9 +7,7 @@ But PoachCoach is more than a booking app—it’s a community. We foster mentor
 Current Features:
 
 Login Page (Authentication via Google not set-up yet)
-
 Two step sign-up page for Coaches
-
 Two step-sign-up page for Students 
 
 
