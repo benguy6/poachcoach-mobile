@@ -16,7 +16,7 @@ export default function EntryPage() {
   return (
     <View style={styles.container}>
       <Image
-        source={require("../../assets/poach-icon.png")} // Add your icon to /assets
+        source={require("../../assets/poach-icon.png")} 
         style={styles.logo}
         resizeMode="contain"
       />
