@@ -1,4 +1,4 @@
-// src/services/authService.ts
+
 
 const SUPABASE_URL = "https://ezdbjkcrtepdihmyunzm.supabase.co";
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
