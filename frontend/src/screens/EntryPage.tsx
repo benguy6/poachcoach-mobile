@@ -8,7 +8,7 @@ export default function EntryPage() {
   useEffect(() => {
     const timeout = setTimeout(() => {
       navigation.replace("Login");
-    }, 2000); // 2s splash delay
+    }, 2000); 
 
     return () => clearTimeout(timeout);
   }, []);
