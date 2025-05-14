@@ -4,6 +4,7 @@ PoachCoach is a dynamic platform reimagining how sports coaching is accessed and
 
 But PoachCoach is more than a booking app—it’s a community. We foster mentorship, friendships, and sportsmanship. From dashboards that track progress to forums for parent advice, our platform goes beyond transactions. Our vision is to be Singapore’s go-to hub for sports coaching—a place where young athletes grow, coaches thrive, and everyone stays connected to the game they love.
 
+
 Current Features:
 
 Login Page (Authentication via Google not set-up yet)
@@ -11,6 +12,7 @@ Login Page (Authentication via Google not set-up yet)
 Two step sign-up page for Coaches
 
 Two step-sign-up page for Students 
+
 
 
 Instructions on how to run the app:
