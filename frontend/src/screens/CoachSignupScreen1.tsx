@@ -9,8 +9,12 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { registerCoachStep1 } from "../services/api";
+import { useGoogleAuth } from '../../auth/useGoogleAuth';
+
+
 
 export default function CoachSignupScreen1() {
+  const { promptAsync } = useGoogleAuth('CoachSignupScreen2');
   const navigation = useNavigation<any>();
   const [email, setEmail] = useState("");
 
@@ -62,10 +66,25 @@ export default function CoachSignupScreen1() {
       </View>
 
       {/* Google Login */}
-      <TouchableOpacity style={styles.googleButton}>
-        <Text style={styles.googleText}>Continue with Google</Text>
-      </TouchableOpacity>
-
+      <TouchableOpacity
+        style={{
+        backgroundColor: 'white',
+        borderRadius: 8,
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+         marginTop: 20,
+        }}
+        onPress={() => promptAsync()}
+      >
+  <Image
+    source={{ uri: 'https://img.icons8.com/color/48/google-logo.png' }}
+    style={{ width: 20, height: 20, marginRight: 10 }}
+  />
+  <Text style={{ color: 'black', fontWeight: 'bold' }}>Continue with Google</Text>
+</TouchableOpacity>
       {/* Terms and Privacy */}
       <Text style={styles.terms}>
         By clicking continue, you agree to our{" "}

@@ -10,8 +10,11 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { registerStudentStep1 } from "../services/api"; 
+import { useGoogleAuth } from '../../auth/useGoogleAuth'; // adjust path as needed
+
 
 export default function StudentSignupScreen1() {
+  const { promptAsync } = useGoogleAuth('StudentSignupScreen2');
   const navigation = useNavigation<any>();
   const [email, setEmail] = useState("");
 

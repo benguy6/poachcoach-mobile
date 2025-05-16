@@ -18,6 +18,7 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { registerStudent } from "../services/api"; // ✅ Central API import
 
 export default function StudentSignupScreen2() {
+  
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const email = route.params?.email || "";

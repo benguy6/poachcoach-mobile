@@ -17,8 +17,6 @@ import DropDownPicker from "react-native-dropdown-picker";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { registerCoach } from "../services/api";
 
-
-
 export default function CoachSignupScreen2() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
