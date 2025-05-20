@@ -11,7 +11,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors()); // You can pass options: { origin: "http://localhost:19006" } to restrict in dev
+app.use(cors()); 
 app.use(express.json());
 
 // Routes

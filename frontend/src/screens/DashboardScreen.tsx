@@ -6,7 +6,7 @@ export default function DashboardScreen() {
   const navigation = useNavigation<any>();
 
   const handleLogout = async () => {
-    // In future: manually clear tokens or session state
+    
     navigation.reset({
       index: 0,
       routes: [{ name: "Login" }],

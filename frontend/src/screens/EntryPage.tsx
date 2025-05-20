@@ -8,7 +8,7 @@ export default function EntryPage() {
   useEffect(() => {
     const timeout = setTimeout(() => {
       navigation.replace("Login");
-    }, 2000); // 2s splash delay
+    }, 2000); 
 
     return () => clearTimeout(timeout);
   }, []);
@@ -16,7 +16,7 @@ export default function EntryPage() {
   return (
     <View style={styles.container}>
       <Image
-        source={require("../../assets/poach-icon.png")} // Add your icon to /assets
+        source={require("../../assets/poach-icon.png")} 
         style={styles.logo}
         resizeMode="contain"
       />

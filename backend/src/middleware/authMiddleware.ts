@@ -1,4 +1,4 @@
-// src/middleware/authMiddleware.ts
+
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../supabaseClient';
 

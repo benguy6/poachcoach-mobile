@@ -1,8 +1,8 @@
-// src/services/api.ts
 
-export const BACKEND_URL = "http://172.20.10.11:3000"; // 🔁 Update this as needed
 
-// ========== Utility POST method ==========
+export const BACKEND_URL = "http://172.20.10.11:3000"; // Update this as needed
+
+
 async function post(endpoint: string, body: any) {
   const url = `${BACKEND_URL}${endpoint}`;
   console.log(`📡 POST ${url}`);
@@ -18,7 +18,7 @@ async function post(endpoint: string, body: any) {
     });
 
     const text = await res.text(); // Get raw response first
-    console.log(`🧾 Raw response from ${url}:\n`, text); // <-- Add this line!
+    console.log(`🧾 Raw response from ${url}:\n`, text); 
 
     let result;
     try {
@@ -43,9 +43,6 @@ async function post(endpoint: string, body: any) {
 
 
 
-// ========== User & Auth API Methods ==========
-
-// ----- Coach -----
 export const registerCoachStep1 = async (email: string) => {
   return await post("/api/user/registerCoachStep1", { email });
 };
@@ -63,7 +60,6 @@ export const registerCoach = async (data: {
   return await post("/api/user/signup-coach", data);
 };
 
-// ----- Student -----
 export const registerStudentStep1 = async (email: string) => {
   return await post("/api/user/registerStudentStep1", { email });
 };
@@ -81,7 +77,6 @@ export const registerStudent = async (data: {
   return await post("/api/user/signup-Student", data);
 };
 
-// ----- Login -----
 export const login = async (email: string, password: string) => {
   return await post("/api/user/login", { email, password });
 };
