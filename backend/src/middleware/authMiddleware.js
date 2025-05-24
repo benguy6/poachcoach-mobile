@@ -1,12 +1,6 @@
+const { supabase } = require('../supabaseClient');
 
-import { Request, Response, NextFunction } from 'express';
-import { supabase } from '../supabaseClient';
-
-export const verifySupabaseToken = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
+const verifySupabaseToken = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
 
@@ -23,14 +17,11 @@ export const verifySupabaseToken = async (
       return;
     }
 
-    // Attach user to request
     req.user = {
       id: data.user.id,
       email: data.user.email || '',
       username: data.user.user_metadata?.username || '',
     };
-    
-    
 
     next();
   } catch (err) {
@@ -38,3 +29,8 @@ export const verifySupabaseToken = async (
     res.status(500).json({ error: 'Internal server error during authentication' });
   }
 };
+
+module.exports = {
+  verifySupabaseToken,
+};
+
