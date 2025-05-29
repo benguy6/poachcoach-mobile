@@ -1,6 +1,6 @@
 
 
-export const BACKEND_URL = "http://172.20.10.11:3000"; // Update this as needed
+export const BACKEND_URL = "http://172.20.10.3:3000"; // Update this as needed
 
 
 async function post(endpoint: string, body: any) {
@@ -41,11 +41,18 @@ async function post(endpoint: string, body: any) {
   }
 }
 
-
-
-export const registerCoachStep1 = async (email: string) => {
-  return await post("/api/user/registerCoachStep1", { email });
+export const registerCoachStep1 = async (
+  email: string,
+  password: string,
+  confirm_password: string
+) => {
+  return await post("/api/user/registerCoachStep1", {
+    email,
+    password,
+    confirm_password,
+  });
 };
+
 
 export const registerCoach = async (data: {
   email: string;
@@ -60,9 +67,10 @@ export const registerCoach = async (data: {
   return await post("/api/user/signup-coach", data);
 };
 
-export const registerStudentStep1 = async (email: string) => {
-  return await post("/api/user/registerStudentStep1", { email });
+export const registerStudentStep1 = async (email: string, password: string) => {
+  return await post("/api/user/registerStudentStep1", { email, password });
 };
+
 
 export const registerStudent = async (data: {
   email: string;
@@ -71,11 +79,13 @@ export const registerStudent = async (data: {
   last_name: string;
   age: string;
   gender: string;
-  level_of_expertise: string;
-  qualifications?: string;
+  number: string;
+  postal_code: string;
+  isGoogleSignup: boolean;
 }) => {
-  return await post("/api/user/signup-Student", data);
+  return await post("/api/user/signup-student", data);
 };
+
 
 export const login = async (email: string, password: string) => {
   return await post("/api/user/login", { email, password });

@@ -1,369 +1,234 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
   TextInput,
   StyleSheet,
+  Image,
   TouchableOpacity,
   Alert,
-  Pressable,
-  KeyboardAvoidingView,
-  Platform,
-  FlatList,
 } from "react-native";
-import * as DocumentPicker from 'expo-document-picker';
-import Checkbox from "expo-checkbox";
-import DropDownPicker from "react-native-dropdown-picker";
-import { useNavigation, useRoute } from "@react-navigation/native";
-import { registerCoach } from "../services/api";
+import { useNavigation } from "@react-navigation/native";
+import * as SecureStore from "expo-secure-store";
+import { login } from "../services/api";
 
-export default function CoachSignupScreen2() {
+import * as Google from "expo-auth-session/providers/google";
+import * as WebBrowser from "expo-web-browser";
+
+WebBrowser.maybeCompleteAuthSession();
+
+export default function LoginScreen() {
   const navigation = useNavigation<any>();
-  const route = useRoute<any>();
-  const email = route.params?.email || "";
-
-  const [first_Name, setFirstName] = useState("");
-  const [last_Name, setLastName] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [qualifications, setQualifications] = useState("");
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<any>(null);
+  const [error, setError] = useState("");
 
-  const [openGender, setOpenGender] = useState(false);
-  const [gender, setGender] = useState("Male");
-  const [genderItems, setGenderItems] = useState([
-    { label: "Male", value: "Male" },
-    { label: "Female", value: "Female" },
-    { label: "Other", value: "Other" },
-  ]);
+  // Google Auth setup
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    clientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID!,
+  });
 
-  const [openAge, setOpenAge] = useState(false);
-  const [age, setAge] = useState("21");
-  const [ageItems, setAgeItems] = useState(
-    Array.from({ length: 60 }, (_, i) => ({
-      label: `${i + 18}`,
-      value: `${i + 18}`,
-    }))
-  );
+  useEffect(() => {
+    if (response?.type === "success") {
+      const { authentication } = response;
+      fetchUserInfo(authentication?.accessToken || "");
+    }
+  }, [response]);
 
-  const [openSport, setOpenSport] = useState(false);
-  const [sport, setSport] = useState("Cricket");
-  const [sportItems, setSportItems] = useState([
-    { label: "Cricket", value: "Cricket" },
-    { label: "Football", value: "Football" },
-    { label: "Tennis", value: "Tennis" },
-  ]);
-
-  const isStrongPassword = (password: string): boolean => {
-    const upper = /[A-Z]/;
-    const special = /[!@#$%^&*(),.?":{}|<>]/;
-    return password.length >= 6 && upper.test(password) && special.test(password);
-  };
-
-  const handleSubmit = async () => {
-  if (!acceptedTerms) {
-    Alert.alert("Please accept the terms to continue.");
-    return;
-  }
-  if (!isStrongPassword(password)) {
-    Alert.alert("Password must be stronger.");
-    return;
-  }
-
-  try {
-    await registerCoach({
-      email,
-      password,
-      first_name: first_Name,
-      last_name: last_Name,
-      age,
-      gender,
-      sport,
-      qualifications: qualifications || "",
+  const fetchUserInfo = async (token: string) => {
+    const res = await fetch("https://www.googleapis.com/userinfo/v2/me", {
+      headers: { Authorization: `Bearer ${token}` },
     });
+    const userInfo = await res.json();
 
-    Alert.alert("Success!", "Coach registered successfully.");
-    navigation.navigate("Login");
-  } catch (err: any) {
-    console.error(err);
-    Alert.alert("Signup Failed", err.message || "Unknown error");
-  }
-};
-
-
-  const pickDocument = async () => {
-    const result = await DocumentPicker.getDocumentAsync({
-      type: '*/*',
-      copyToCacheDirectory: true,
-    });
-
-    if (result.assets && result.assets.length > 0 && result.assets[0].uri) {
-      setSelectedFile(result.assets[0]);
+    const emailExists = await checkEmailExists(userInfo.email);
+    if (emailExists) {
+      Alert.alert("Email already in use", "Redirecting to login screen.");
+      navigation.navigate("CoachSignup1", {
+        error: "Email already in use",
+      });
+    } else {
+      navigation.navigate("CoachSignupScreen2", {
+        email: userInfo.email,
+        isGoogleUser: true,
+      });
     }
   };
 
-  const isSubmitDisabled =
-    !first_Name.trim() ||
-    !last_Name.trim() ||
-    !isStrongPassword(password) ||
-    !acceptedTerms;
+  const checkEmailExists = async (email: string): Promise<boolean> => {
+    try {
+        const res = await fetch("http://172.20.10.3:3000/api/user/checkEmail", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      return data.exists;
+    } catch (err) {
+      console.error("Email check failed:", err);
+      return false;
+    }
+  };
 
-  const formContent = (
-    <>
-      <TouchableOpacity onPress={() => navigation.goBack()}>
-        <Text style={styles.close}>✕</Text>
-      </TouchableOpacity>
+  const handleLogin = async () => {
+    if (!email || !password) {
+      setError("Email and password are required");
+      return;
+    }
 
-      <View style={styles.card}>
-        <View style={styles.logoWrap}>
-          <Text style={styles.logo}>🏹</Text>
-        </View>
+    try {
+      const result = await login(email, password);
+      await SecureStore.setItemAsync("userId", result.user.id);
+      await SecureStore.setItemAsync("userRole", result.user.role);
+      await SecureStore.setItemAsync("userEmail", result.user.email);
+      navigation.navigate("Dashboard"); // i.e. /me
+    } catch (err: any) {
+      console.error("Login error:", err.message);
+      setError(err.message || "Login failed");
+    }
+  };
 
-        <Text style={styles.title}>Coaching information</Text>
-
-        <View style={styles.row}>
-          <TextInput
-            placeholder="First Name"
-            style={[styles.input, { marginRight: 6 }]}
-            value={first_Name}
-            onChangeText={setFirstName}
-          />
-          <TextInput
-            placeholder="Last Name"
-            style={[styles.input, { marginLeft: 6 }]}
-            value={last_Name}
-            onChangeText={setLastName}
-          />
-        </View>
-
-        <TextInput
-          placeholder="Password"
-          secureTextEntry
-          style={styles.input}
-          value={password}
-          onChangeText={setPassword}
-        />
-
-        {password.length > 0 && !isStrongPassword(password) && (
-          <Text style={{ color: 'red', fontSize: 12 }}>
-            Password must be 6+ characters, with 1 uppercase & 1 special character.
-          </Text>
-        )}
-
-        <Text style={styles.label}>Gender</Text>
-        <View style={{ zIndex: 3000 }}>
-          <DropDownPicker
-            open={openGender}
-            value={gender}
-            items={genderItems}
-            setOpen={setOpenGender}
-            setValue={setGender}
-            setItems={setGenderItems}
-            style={styles.dropdown}
-            dropDownContainerStyle={styles.dropdownContainer}
-            textStyle={styles.dropdownText}
-            labelStyle={styles.dropdownLabel}
-            selectedItemLabelStyle={styles.dropdownSelected}
-            placeholderStyle={styles.dropdownPlaceholder}
-          />
-        </View>
-
-        <Text style={styles.label}>Age</Text>
-        <View style={{ zIndex: 2000 }}>
-          <DropDownPicker
-            open={openAge}
-            value={age}
-            items={ageItems}
-            setOpen={setOpenAge}
-            setValue={setAge}
-            setItems={setAgeItems}
-            style={styles.dropdown}
-            dropDownContainerStyle={styles.dropdownContainer}
-            textStyle={styles.dropdownText}
-            labelStyle={styles.dropdownLabel}
-            selectedItemLabelStyle={styles.dropdownSelected}
-            placeholderStyle={styles.dropdownPlaceholder}
-          />
-        </View>
-
-        <Text style={styles.label}>Sport</Text>
-        <View style={{ zIndex: 1000 }}>
-          <DropDownPicker
-            open={openSport}
-            value={sport}
-            items={sportItems}
-            setOpen={setOpenSport}
-            setValue={setSport}
-            setItems={setSportItems}
-            style={styles.dropdown}
-            dropDownContainerStyle={styles.dropdownContainer}
-            textStyle={styles.dropdownText}
-            labelStyle={styles.dropdownLabel}
-            selectedItemLabelStyle={styles.dropdownSelected}
-            placeholderStyle={styles.dropdownPlaceholder}
-          />
-        </View>
-
-        <View style={styles.labelRow}>
-          <Text style={styles.label}>Achievements and Qualifications (Upload the relevant proof beside)</Text>
-          <TouchableOpacity style={styles.uploadButton} onPress={pickDocument}>
-            <Text style={{ fontSize: 18, color: "#fff" }}>⬆</Text>
-          </TouchableOpacity>
-        </View>
-
-        <TextInput
-          placeholder="e.g. Degree in Sports Science"
-          style={[styles.input, { height: 80 }]}
-          value={qualifications}
-          onChangeText={setQualifications}
-          multiline
-        />
-
-        {selectedFile && (
-          <View style={styles.fileTag}><Text style={styles.fileTagText}>{selectedFile.name}</Text></View>
-        )}
-
-        <View style={styles.checkboxRow}>
-          <Checkbox value={acceptedTerms} onValueChange={setAcceptedTerms} color="#ff6a00" />
-          <Text style={styles.checkboxLabel}> I accept the terms</Text>
-        </View>
-
-        <Pressable>
-          <Text style={styles.link}>Read our T&Cs</Text>
-        </Pressable>
-      </View>
-    </>
-  );
+  const styles = StyleSheet.create({
+    container: {
+      padding: 24,
+      flex: 1,
+      backgroundColor: "#fff",
+      alignItems: "center",
+    },
+    logo: {
+      width: 200,
+      height: 200,
+      marginTop: 30,
+    },
+    input: {
+      width: "100%",
+      borderColor: "#ccc",
+      borderWidth: 1,
+      borderRadius: 8,
+      padding: 12,
+      marginVertical: 6,
+    },
+    error: {
+      color: "red",
+      marginVertical: 6,
+    },
+    loginButton: {
+      backgroundColor: "#ff6a00",
+      padding: 12,
+      borderRadius: 8,
+      width: "100%",
+      alignItems: "center",
+      marginVertical: 8,
+    },
+    loginText: {
+      color: "#fff",
+      fontWeight: "bold",
+    },
+    or: {
+      marginVertical: 10,
+      color: "#999",
+    },
+    googleButton: {
+      backgroundColor: "#f1f1f1",
+      padding: 12,
+      borderRadius: 8,
+      width: "100%",
+      alignItems: "center",
+      marginBottom: 6,
+    },
+    divider: {
+      height: 1,
+      backgroundColor: "#ccc",
+      width: "100%",
+      marginVertical: 20,
+    },
+    signupPrompt: {
+      marginTop: 20,
+      color: "#666",
+    },
+    bottomButtons: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: 10,
+      width: "100%",
+    },
+    becomeCoach: {
+      backgroundColor: "black",
+      flex: 1,
+      padding: 14,
+      marginRight: 5,
+      borderRadius: 8,
+      alignItems: "center",
+    },
+    becomeStudent: {
+      backgroundColor: "#ff6a00",
+      flex: 1,
+      padding: 14,
+      marginLeft: 5,
+      borderRadius: 8,
+      alignItems: "center",
+    },
+    buttonText: {
+      color: "#fff",
+      fontWeight: "bold",
+    },
+  });
 
   return (
     <View style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={{ flex: 1 }}
-        keyboardVerticalOffset={80}
+      <Image source={require("../../assets/poach-icon.png")} style={styles.logo} />
+
+      <TextInput
+        placeholder="Email"
+        value={email}
+        onChangeText={setEmail}
+        style={styles.input}
+        placeholderTextColor="#999"
+      />
+      <TextInput
+        placeholder="Password"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+        style={styles.input}
+        placeholderTextColor="#999"
+      />
+
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+
+      <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
+        <Text style={styles.loginText}>Login</Text>
+      </TouchableOpacity>
+
+      <Text style={styles.or}>or</Text>
+
+      <TouchableOpacity
+        style={styles.googleButton}
+        onPress={() => promptAsync()}
+        disabled={!request}
       >
-        <FlatList
-          style={{ backgroundColor: "#000" }}
-          contentContainerStyle={{ backgroundColor: "#000" }}
-          data={[]}
-          keyExtractor={() => "dummy"}
-          renderItem={null}
-          ListHeaderComponent={<View style={styles.scrollContent}>{formContent}</View>}
-          ListFooterComponent={
-            <View style={styles.bottomButtonContainer}>
-              <TouchableOpacity
-                style={[styles.submitButton, isSubmitDisabled && { opacity: 0.4 }]}
-                onPress={handleSubmit}
-                disabled={isSubmitDisabled}
-              >
-                <Text style={styles.submitText}>Become a Coach</Text>
-              </TouchableOpacity>
-            </View>
-          }
-        />
-      </KeyboardAvoidingView>
+        <Text>Continue with Google</Text>
+      </TouchableOpacity>
+
+      <View style={styles.divider} />
+
+      <Text style={styles.signupPrompt}>Haven’t signed up?</Text>
+
+      <View style={styles.bottomButtons}>
+        <TouchableOpacity
+          style={styles.becomeCoach}
+          onPress={() => navigation.navigate("CoachSignup1")}
+        >
+          <Text style={styles.buttonText}>Become a Coach</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.becomeStudent}
+          onPress={() => navigation.navigate("StudentSignup1")}
+        >
+          <Text style={styles.buttonText}>Become a Student</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#000" },
-  scrollContent: { padding: 20, paddingBottom: 100 },
-  close: { color: "#fff", fontSize: 22, marginBottom: 12 },
-  card: { backgroundColor: "#fff", borderRadius: 16, padding: 20 },
-  logoWrap: { alignItems: "center", marginBottom: 8 },
-  logo: { fontSize: 24, color: "#ff6a00" },
-  title: { fontSize: 20, fontWeight: "bold", marginBottom: 16 },
-  row: { flexDirection: "row" },
-  labelRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  input: {
-    backgroundColor: "#f4f4f4",
-    padding: 10,
-    borderRadius: 8,
-    marginBottom: 12,
-    flex: 1,
-    fontSize: 14,
-    color: "#000",
-  },
-  label: { fontWeight: "600", marginBottom: 4, marginTop: 8, flex: 1 },
-  uploadButton: {
-    backgroundColor: "#000",
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    width: 36,
-    height: 36,
-    marginTop: 8,
-    marginLeft: 8,
-  },
-  fileTag: {
-    alignSelf: "flex-start",
-    backgroundColor: "#eee",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  fileTagText: {
-    fontSize: 12,
-    color: "#333",
-  },
-  checkboxRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 6,
-  },
-  checkboxLabel: {
-    marginLeft: 8,
-    fontSize: 14,
-  },
-  link: {
-    color: "#ff6a00",
-    textDecorationLine: "underline",
-    marginBottom: 16,
-    marginTop: -4,
-  },
-  bottomButtonContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    backgroundColor: "#000",
-  },
-  submitButton: {
-    backgroundColor: "#000",
-    padding: 14,
-    borderRadius: 8,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#fff",
-  },
-  submitText: {
-    color: "#fff",
-    fontWeight: "bold",
-  },
-  dropdown: {
-    backgroundColor: "#f4f4f4",
-    borderColor: "#ccc",
-    borderRadius: 8,
-    marginBottom: 12,
-  },
-  dropdownContainer: {
-    backgroundColor: "#fff",
-    borderColor: "#ccc",
-  },
-  dropdownText: {
-    fontSize: 14,
-    color: "#000",
-  },
-  dropdownLabel: {
-    fontSize: 14,
-    color: "#000",
-  },
-  dropdownSelected: {
-    fontWeight: "bold",
-    color: "#000",
-  },
-  dropdownPlaceholder: {
-    color: "#888",
-    fontSize: 14,
-  },
-});
