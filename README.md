@@ -11,29 +11,48 @@ User stories:
 As an experienced athlete, I want to be able to find students to coach
 
 As a university student or working adult, I want to be able to set my availability and limit the number of students I take on so I can balance coaching with my other commitments.
+
 As a retired professional athlete, I want to be able to mentor young talent without committing to full-time coaching
+
 As a coach who wants more accountability with payments by students, I want to be able to outsource these considerations to an external app.
+
 As a coach, I want to easily see my booked sessions on a calendar.
+
 As a beginner at the sport, I want to find a coach that can help build my foundation at a cheap price before I decide whether to fully commit to the sport.
+
 As a student new to sports training, I want to be able to join a group training session rather than 1-on-1 lessons to save money and improve with peers.
+
 As a student, I want to find a coach near me because I just want to pick up the sport but I do not have the time to travel right now.
+
 As an already estabilished athlete, I want to be able to easily find an expert coach that can help me improve my craft and possibly try for 1-to-1 lessons.
+
 As a parent, I want to be able to easily see all of my child’s coach’s information, which includes his experience and contact details.
+
 As a parent who is unsure about coaching fees, I want to be able to compare different coaches based on their rates and experience to find the best fit for my child.
+
 As a parent, I want to be able to trust that the training sessions are safe.
+
 As a mother who wants to get regular feedback on the progress her son is making in the sport, I want to be able to get timely updates after every coaching session in the app.
+
 As an admin, I want to be able to verify and approve coaches before their profiles go live to ensure quality and safety.
 
 
 Core features:
 
 Sign-in and sign-up page with basic authentication for user profiles, splitting up the students/parents and the coaches.
+
 Coaches can create a profile to showcase their experience, qualifications, and rates, making it easier for students to find them.
+
 Centralized coach database, that is built by collecting information from the coaches that have signed up.
+
 A dashboard for both the student and the coach, showing their own respective information, such as the coach’s rating and experience, and the student’s progress reports and badges earned.
+
 Coaches can set availability and manage training slots via an in-app calendar.
+
 Location-based filtering allows students to find nearby coaches to reduce travel time. 
+
 Students can search for and book a coach based on price, location, skill level, and training preferences (1-on-1 vs. group lessons)
+
 In-app chat feature for direct communication between coaches and students/parents.
 
 
