@@ -6,10 +6,11 @@ import {
   StyleSheet,
   Image,
   TouchableOpacity,
+  Alert,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import * as SecureStore from "expo-secure-store";
-import { login } from "../services/api"; // ✅ Import your central login function
+import { login } from "../services/api";
 
 export default function LoginScreen() {
   const navigation = useNavigation<any>();
@@ -19,19 +20,29 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      setError("Email and password are required");
+      setError("Email and password are required.");
       return;
     }
 
     try {
-      const result = await login(email, password); // ✅ Use centralized API call
-      await SecureStore.setItemAsync("userId", result.user.id);
-      await SecureStore.setItemAsync("userRole", result.user.role);
-      await SecureStore.setItemAsync("userEmail", result.user.email);
-      navigation.navigate("Dashboard");
+      const result = await login(email, password);
+      const session = result.session;
+      const user = session?.user;
+
+      if (!user?.email_confirmed_at) {
+        Alert.alert(
+          "Email Not Verified",
+          "Please verify your email before logging in."
+        );
+        return;
+      }
+
+      await SecureStore.setItemAsync("userId", user.id);
+      await SecureStore.setItemAsync("userEmail", user.email);
+      navigation.navigate("StudentDashboard");
     } catch (err: any) {
       console.error("Login error:", err.message);
-      setError(err.message || "Login failed");
+      setError(err.message || "Login failed.");
     }
   };
 
@@ -39,13 +50,24 @@ export default function LoginScreen() {
     <View style={styles.container}>
       <Image source={require("../../assets/poach-icon.png")} style={styles.logo} />
 
+      <View style={{ width: "100%", alignItems: "flex-end" }}>
+        <TouchableOpacity onPress={() => navigation.navigate("ForgotPasswordScreen")}>
+          <Text style={styles.forgotText}>Forgot Password?</Text>
+        </TouchableOpacity>
+      </View>
+
+      <Text style={styles.inputLabel}>Email</Text>
       <TextInput
         placeholder="Email"
         value={email}
         onChangeText={setEmail}
         style={styles.input}
         placeholderTextColor="#999"
+        autoCapitalize="none"
+        keyboardType="email-address"
       />
+
+      <Text style={styles.inputLabel}>Password</Text>
       <TextInput
         placeholder="Password"
         value={password}
@@ -63,7 +85,10 @@ export default function LoginScreen() {
 
       <Text style={styles.or}>or</Text>
 
-      <TouchableOpacity style={styles.googleButton}>
+      <TouchableOpacity
+        style={styles.googleButton}
+        onPress={() => Alert.alert("Google Sign-In coming soon!")}
+      >
         <Text>Continue with Google</Text>
       </TouchableOpacity>
 
@@ -78,7 +103,6 @@ export default function LoginScreen() {
         >
           <Text style={styles.buttonText}>Become a Coach</Text>
         </TouchableOpacity>
-
         <TouchableOpacity
           style={styles.becomeStudent}
           onPress={() => navigation.navigate("StudentSignup1")}
@@ -91,15 +115,42 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 24, flex: 1, backgroundColor: "#fff", alignItems: "center" },
-  logo: { width: 200, height: 200, marginTop: 30 },
-  title: { fontSize: 24, fontWeight: "bold", marginVertical: 0, color: "#ff6a00" },
+  container: {
+    padding: 24,
+    flex: 1,
+    backgroundColor: "#fff",
+    alignItems: "center",
+  },
+  logo: {
+    width: 200,
+    height: 200,
+    marginTop: 30,
+  },
   input: {
     width: "100%",
     borderColor: "#ccc",
     borderWidth: 1,
     borderRadius: 8,
     padding: 12,
+    marginVertical: 6,
+  },
+  inputLabel: {
+    alignSelf: "flex-start",
+    marginLeft: 4,
+    marginBottom: 2,
+    fontWeight: "600",
+    color: "#333",
+  },
+  forgotText: {
+    color: "#ff6a00",
+    textAlign: "right",
+    alignSelf: "flex-end",
+    marginBottom: 10,
+    marginTop: -4,
+    textDecorationLine: "underline",
+  },
+  error: {
+    color: "red",
     marginVertical: 6,
   },
   loginButton: {
@@ -110,8 +161,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginVertical: 8,
   },
-  loginText: { color: "#fff", fontWeight: "bold" },
-  or: { marginVertical: 10, color: "#999" },
+  loginText: {
+    color: "#fff",
+    fontWeight: "bold",
+  },
+  or: {
+    marginVertical: 10,
+    color: "#999",
+  },
   googleButton: {
     backgroundColor: "#f1f1f1",
     padding: 12,
@@ -156,8 +213,7 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "bold",
   },
-  error: {
-    color: "red",
-    marginVertical: 6,
-  },
 });
+
+
+
