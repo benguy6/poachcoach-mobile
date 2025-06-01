@@ -13,6 +13,10 @@ Two step sign-up page for Coaches
 
 Two step-sign-up page for Students 
 
+Reset Password functionality
+
+Email Verification with a functional landing page
+
 
 
 Instructions on how to run the app:
@@ -23,8 +27,9 @@ To run the PoachCoach app locally, you’ll need to install dependencies in two 
 
 First, make sure Node.js is installed on your computer. You’ll also need the Expo Go app installed on your phone.
 
-Once you’ve downloaded the project and unzipped it, open a terminal and navigate into the frontend directory. There, run the command npm install. This will install all the necessary packages to run the mobile app, including React Native, Expo, and other supporting libraries.
+Once you’ve downloaded the project and unzipped it, open a terminal window and navigate into the frontend directory. There, run the command npm install. This will install all the necessary packages to run the mobile app, including React Native, Expo, and other supporting libraries. 
 
 After that, open a second terminal window and navigate to the backend directory. In that folder, run npm install as well. This installs all the packages needed to run the backend server, such as Express and Supabase client libraries.
 
 Once both installations are complete, you can start the backend server first (from the backend folder) by running npm start, and then start the Expo development server for the frontend (from the frontend folder) by running npx expo start. Then, once you see something like "Server is running on http://localhost:3000" on the backend terminal, scan the QR code displayed upon starting the Expo development server using your phone's Camera app to start testing on Expo Go.
+
