@@ -8,8 +8,8 @@ Our vision is to be Singapore’s go-to hub for sports coaching: a place where y
 
 User stories:
 
-As an experienced athlete, I want to be able to find students to coach
-As a university student or working adult, I want to be able to set my availability and limit the number of students I take on so I can balance coaching with my other commitments.
+1: As an experienced athlete, I want to be able to find students to coach
+2: As a university student or working adult, I want to be able to set my availability and limit the number of students I take on so I can balance coaching with my other commitments.
 As a retired professional athlete, I want to be able to mentor young talent without committing to full-time coaching
 As a coach who wants more accountability with payments by students, I want to be able to outsource these considerations to an external app.
 As a coach, I want to easily see my booked sessions on a calendar.
