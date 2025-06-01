@@ -1,32 +1,46 @@
 {
   "expo": {
     "name": "PoachCoachMobile",
-    "slug": "PoachCoachMobile",
+    "slug": "poachcoachmobile",
+    "scheme": "poachcoach",
+    "owner": "benguy6",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "plugins": ["expo-secure-store", "expo-web-browser"],
+    "sdkVersion": "53.0.0",
+    "platforms": ["ios", "android"],
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.poachcoachmobile"
     },
     "android": {
+      "package": "com.poachcoachmobile",
+      "edgeToEdgeEnabled": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": {
+            "scheme": "poachcoach",
+            "host": "reset-password"
+          },
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    },
-    "plugins": [
-      "expo-secure-store"
-    ]
+    }
   }
 }
+
