@@ -1,62 +1,47 @@
 const express = require('express');
-const bcrypt = require('bcryptjs');
+const bcrypt = require('bcryptjs'); 
 const { supabase } = require('../supabaseClient');
 const { verifySupabaseToken } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
-const hashPassword = (password) => bcrypt.hashSync(password, 10);
-const checkPassword = (plain, hashed) => bcrypt.compareSync(plain, hashed);
-
 const isStrongPassword = (password) => {
+  if (typeof password !== 'string') return false;  
   const upper = /[A-Z]/;
   const special = /[!@#$%^&*(),.?":{}|<>]/;
   return password.length >= 6 && upper.test(password) && special.test(password);
 };
 
 const isEmailTaken = async (email) => {
-  const { data } = await supabase
+  const { data, error: authError } = await supabase.auth.admin.listUsers();
+
+  if (authError) {
+    console.error('Auth check failed:', authError.message);
+    return false; 
+  }
+
+  const existsInAuth = data?.users?.some(user => user.email === email);
+  if (existsInAuth) return true;
+
+  
+  const { data: users } = await supabase
     .from('Users')
     .select('id')
     .eq('email', email)
     .limit(1);
 
-  return !!data?.length;
-};
-
-const createAuthUser = async (email, password) => {
-  const { data: user, error } = await supabase.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: false 
-  });
-
-  if (error || !user?.user?.id) {
-    return { data: null, error };
-  }
-
-  const { error: confirmError } = await supabase.auth.admin.sendEmailVerificationEmail(
-    user.user.id,
-    {
-      redirectTo: 'http://localhost:3000/login'
-    }
-  );
-
-  return {
-    data: user,
-    error: confirmError || null,
-  };
+  return !!users?.length;
 };
 
 
-const createAuthUserGoogle = async (email) => {
+/*const createAuthUserGoogle = async (email) => {
   return await supabase.auth.admin.createUser({
     email,
     email_confirm: true,
   });
-}
+} */
 
-router.post('/googleOauth', async (req, res) => {
+/*router.post('/googleOauth', async (req, res) => {
   const {email: le_email, id: userID} = req.body
   
   if (!le_email || !userID  || await isEmailTaken(le_email)) {
@@ -67,7 +52,32 @@ router.post('/googleOauth', async (req, res) => {
     res.status(200).json({ message: 'Email is available' })
     return
   }
-})
+})*/
+
+router.post('/registerCoachStep1', async (req, res) => {
+  const { email, password, confirm_password } = req.body;
+
+  console.log("Checking coach email:", email);
+
+  if (!email) {
+    return res.status(400).json({ error: 'Email is required' });
+  }
+
+  if (await isEmailTaken(email)) {
+    return res.status(400).json({ error: 'Email already in use' });
+  }
+
+  if (!isStrongPassword(password)) {
+    return res.status(400).json({ error: 'Password must include uppercase letters and special characters' });
+  }
+
+  if (confirm_password !== password) {
+    return res.status(400).json({ error: 'Passwords do not match' });
+  }
+
+  return res.status(200).json({ message: 'Coach email and password are valid' });
+});
+
 
 router.post('/registerStudentStep1', async (req, res) => {
   const { email, password, confirm_password } = req.body;
@@ -100,108 +110,63 @@ router.post('/registerStudentStep1', async (req, res) => {
 });
 
 
-
-router.post('/registerCoachStep1', async (req, res) => {
-  const { email, password, confirm_password } = req.body;
-
-  console.log("Checking coach email:", email);
-
-  if (!email) {
-    res.status(400).json({ error: 'Email is required' });
-    return;
-  }
-
-  if (await isEmailTaken(email)) {
-    res.status(400).json({ error: 'Email already in use' });
-    return;
-  }
-
-  if (!isStrongPassword(password)) {
-    res.status(400).json({ error: 'Password must include uppercase letters and special characters' });
-    return;
-  }
-
-  if (confirm_password !== password){
-    res.status(400).json({ error: 'passwords do not match' });
-    return;
-  }
-
-
-  res.status(200).json({ message: 'Email is available' });
-});
-
-
-
 router.post('/signup-coach', async (req, res) => {
   const {
+    id,
     email,
-    password,
     first_name,
     last_name,
     age,
     gender,
     number,
     postal_code,
-    qualifications,
-    sport, 
-    isGoogleSignup,
+    qualifications, 
+    sport,
   } = req.body;
 
-  if (!email || !first_name || !last_name || !age || !gender || !qualifications || !postal_code || !number || !sport) {
-    return res.status(400).json({ error: 'Missing Required Fields' });
+  if (
+    !id ||
+    !email ||
+    !first_name ||
+    !last_name ||
+    !age ||
+    !gender ||
+    !number ||
+    !postal_code ||
+    !sport
+  ) {
+    return res.status(400).json({ error: 'Missing required fields' });
   }
 
-  if (!isGoogleSignup && !password) {
-    return res.status(400).json({ error: 'Missing password for email signup' });
-  }
-
-  if (await isEmailTaken(email)) {
-    return res.status(400).json({ error: 'Email already in use' });
-  }
-
-  let authUser, authError;
-
-  if (isGoogleSignup) {
-    ({ data: authUser, error: authError } = await createAuthUserGoogle(email));
-  } else {
-    ({ data: authUser, error: authError } = await createAuthUser(email, password));
-  }
-
-  if (authError || !authUser?.user?.id) {
-    return res.status(400).json({ error: authError?.message || 'Auth creation failed' });
-  }
-
-  const userId = authUser.user.id;
-
-
-  const userPayload = {
-    id: userId,
-    email,
-    number,
-    first_name,
-    last_name,
-    age: age.toString(),
-    gender,
-    postal_code,
-    role: 'coach',
-    password: isGoogleSignup ? null : await hashPassword(password),
-  };
-
-  const { error: userErr } = await supabase.from('Users').insert([userPayload]);
+  const { error: userErr } = await supabase.from('Users').insert([
+    {
+      id,
+      email,
+      first_name,
+      last_name,
+      age: age.toString(),
+      gender,
+      number,
+      postal_code,
+      role: 'coach',
+    },
+  ]);
 
   if (userErr) {
-    await supabase.auth.admin.deleteUser(userId);
+    console.error('Error inserting into Users:', userErr.message);
     return res.status(500).json({ error: userErr.message });
   }
 
-
-  const { error: coachErr } = await supabase.from('Coaches').insert([{
-    id: userId,
-    qualifications,
+  const coachPayload = {
+    id,
     sport,
-  }]);
+    qualifications,
+  };
+
+  const { error: coachErr } = await supabase.from('Coaches').insert([coachPayload]);
 
   if (coachErr) {
+    console.error('Error inserting into Coaches:', coachErr.message);
     return res.status(500).json({ error: coachErr.message });
   }
 
@@ -209,154 +174,107 @@ router.post('/signup-coach', async (req, res) => {
 });
 
 
+
+
 router.post('/signup-student', async (req, res) => {
   const {
+    id,
     email,
-    password,
     first_name,
     last_name,
     age,
     gender,
     number,
     postal_code,
-    isGoogleSignup
   } = req.body;
 
-  if (!email || !first_name || !last_name || !age || !gender || !number || !postal_code) {
+  if (!id || !email || !first_name || !last_name || !age || !gender || !number || !postal_code) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
-  if (!isGoogleSignup && !password) {
-    return res.status(400).json({ error: 'Missing password for email signup' });
-  }
-
-  if (await isEmailTaken(email)) {
-    return res.status(400).json({ error: 'Email already in use' });
-  }
-
-  let authUser, authError;
-  if (isGoogleSignup) {
-    ({ data: authUser, error: authError } = await createAuthUserGoogle(email));
-  } else {
-    ({ data: authUser, error: authError } = await createAuthUser(email, password));
-  }
-
-  if (authError || !authUser?.user?.id) {
-    return res.status(400).json({ error: authError?.message || 'Auth creation failed' });
-  }
-
-  const userId = authUser.user.id;
-
-
-  const userPayload = {
-    id: userId,
+  const { error: userErr } = await supabase.from('Users').insert([{
+    id,
     email,
     first_name,
     last_name,
-    age: age.toString(), 
+    age: age.toString(),
     gender,
     number,
     postal_code,
     role: 'student',
-    password: isGoogleSignup ? null : await hashPassword(password),
-  };
-
-
-  const { error: userErr } = await supabase.from('Users').insert([userPayload]);
+  }]);
 
   if (userErr) {
-    await supabase.auth.admin.deleteUser(userId);
     return res.status(500).json({ error: userErr.message });
   }
 
-
-  const { error: studentErr } = await supabase.from('Students').insert([{ id: userId }]);
-
+  const { error: studentErr } = await supabase.from('Students').insert([{ id }]);
   if (studentErr) {
     return res.status(500).json({ error: studentErr.message });
   }
 
-  return res.status(201).json({ message: 'Student registered successfully' });
+  return res.status(201).json({ message: 'Student metadata stored successfully' });
 });
-
-
 
 
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
-    res.status(400).json({ error: 'Email and password are required' });
-    return;
+    return res.status(400).json({ error: 'Email and password are required' });
   }
 
-  const { data: users, error } = await supabase
-    .from('Users')
-    .select('*')
-    .eq('email', email)
-    .limit(1);
+  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
 
-  let x = await supabase.auth.admin.listUsers()
-  let y = x.data?.users || []
-
-  for (let i = 0; i < y.length; i++) {
-    if (email===y[i].email && y[i].email_confirmed_at===null) {
-      res.status(400).json({ error: 'You have not verified your email. Try to sign up again after one day' })
-      return;
-    }
+  if (authError) {
+    return res.status(401).json({ error: 'Invalid email or password' });
   }
 
+  const { user, session } = authData;
 
-  if (error || !users || users.length === 0) {
-    res.status(400).json({ error: 'Invalid credentials' });
-    return;
+  if (!user.email_confirmed_at) {
+    return res.status(400).json({
+      error: 'You have not verified your email. Please verify it before logging in.',
+    });
   }
 
-  const user = users[0];
-  const valid = checkPassword(password, user.password);
-  if (!valid) {
-    res.status(400).json({ error: 'Invalid credentials' });
-    return;
-  }
+  
 
-  res.status(200).json({
+  return res.status(200).json({
     message: 'Login successful',
-    user: {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-    }
+    session,
   });
 });
 
+
+
+
 router.post('/request-reset-password', async (req, res) => {
-  const { email } = req.body
+  const { email } = req.body;
 
   if (!email) {
-    res.status(400).json({ error: 'Email required' });
-    return;
+    return res.status(400).json({ error: 'Email is required.' });
   }
 
   const { data: user, error: userError } = await supabase
     .from('Users')
-    .select('*')
+    .select('id')
     .eq('email', email)
-    .single();
+    .maybeSingle();
 
   if (userError || !user) {
-    return res.status(404).json({ error: 'User not found' });
+    return res.status(404).json({ error: 'User not found.' });
   }
 
-  const { error } = await supabase.auth.api.resetPasswordForEmail(email, {
-    redirectTo: 'http://localhost:3000/reset-password', 
-  });
 
-  if (error) {
-    return res.status(400).json({ error: error.message });
-  }
+  return res.status(200).json({ message: 'Password reset email sent.' });
+});
 
-  return res.status(200).json({ message: 'Password reset email sent' });
-})
+
+
 
 router.post('/reset-password', verifySupabaseToken, async (req, res) => {
   const { new_password, confirm_password } = req.body;
@@ -426,11 +344,4 @@ router.get('/me', verifySupabaseToken, async (req, res) => {
   });
 });
 
-
-
-
 module.exports = router;
-
-
-
-
