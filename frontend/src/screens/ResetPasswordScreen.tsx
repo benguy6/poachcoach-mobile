@@ -39,9 +39,9 @@ export default function ResetPasswordScreen() {
 
     setIsLoading(true);
 
-    const { error } = await supabase.auth.api.updateUser(accessToken.trim(), {
-      password: newPassword,
-    });
+    const { error } = await supabase.auth.updateUser(
+      { password: newPassword }
+    );
 
     setIsLoading(false);
 

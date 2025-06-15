@@ -1,4 +1,4 @@
-export const BACKEND_URL = "http://192.168.1.213:3000"; // Update as needed
+export const BACKEND_URL = "http://192.168.1.17:3000"; // Update as needed
 
 async function post(endpoint: string, body: any) {
   const url = `${BACKEND_URL}${endpoint}`;
