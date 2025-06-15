@@ -17,8 +17,8 @@ import Checkbox from "expo-checkbox";
 import DropDownPicker from "react-native-dropdown-picker";
 import Slider from "@react-native-community/slider";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import { supabase } from "../services/supabase";
-import { registerCoach } from "../services/api";
+import { supabase } from "../../services/supabase";
+import { registerCoach } from "../../services/api";
 
 export default function CoachSignupScreen2() {
   const navigation = useNavigation<any>();

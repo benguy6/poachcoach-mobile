@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import * as SecureStore from "expo-secure-store";
-import { login } from "../services/api";
+import { login } from "../../services/api";
 
 export default function LoginScreen() {
   const navigation = useNavigation<any>();

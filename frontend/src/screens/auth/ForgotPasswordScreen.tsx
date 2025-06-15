@@ -8,8 +8,8 @@ import {
   StyleSheet,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { supabase } from '../services/supabase';
-import { checkEmailExists } from '../services/api';
+import { supabase } from '../../services/supabase';
+import { checkEmailExists } from '../../services/api';
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('');

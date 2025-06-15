@@ -11,7 +11,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { supabase } from '../services/supabase';
+import { supabase } from '../../services/supabase';
 
 export default function ResetPasswordScreen() {
   const navigation = useNavigation<any>(); 
@@ -39,9 +39,7 @@ export default function ResetPasswordScreen() {
 
     setIsLoading(true);
 
-    const { error } = await supabase.auth.updateUser(
-      { password: newPassword }
-    );
+    const { error } = await supabase.auth.api.updateUser(accessToken, { password: newPassword });
 
     setIsLoading(false);
 

@@ -9,7 +9,7 @@ import {
   Alert,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { registerStudentStep1 } from "../services/api";
+import { registerStudentStep1 } from "../../services/api";
 
 export default function StudentSignupScreen1() {
   const navigation = useNavigation<any>();

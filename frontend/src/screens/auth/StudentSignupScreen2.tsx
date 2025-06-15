@@ -14,8 +14,8 @@ import Checkbox from "expo-checkbox";
 import DropDownPicker from "react-native-dropdown-picker";
 import Slider from "@react-native-community/slider";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import { registerStudent } from "../services/api";
-import { supabase } from "../services/supabase";
+import { registerStudent } from "../../services/api";
+import { supabase } from "../../services/supabase";
 
 export default function StudentSignupScreen2() {
   const navigation = useNavigation<any>();
