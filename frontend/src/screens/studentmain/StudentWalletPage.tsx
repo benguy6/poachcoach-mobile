@@ -6,8 +6,25 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
+import BottomNavigation from '../../components/BottomNavigation';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { studentTabs } from '../../constants/studentTabs';
 
-const WalletPage = () => {
+// Update this import path to match your actual App.tsx location
+type MainAppStackParamList = {
+  StudentTabs: undefined;
+  StudentNotifications: undefined;
+  StudentSettings: undefined;
+  StudentChatDetail: { contact?: any; messages?: any[] };
+  StudentWalletTopUp: undefined; // Make sure this matches your App.tsx
+  StudentConfirmPayment: { amount?: number; paymentMethod?: string };
+};
+
+type StudentWalletPageProps = {
+  navigation: NativeStackNavigationProp<MainAppStackParamList>;
+};
+
+const StudentWalletPage = ({ navigation }: StudentWalletPageProps) => {
   const pendingPayments = [
     {
       id: 1,
@@ -66,6 +83,15 @@ const WalletPage = () => {
     }
   };
 
+  // Handler for tab press
+  const handleTabPress = (tabId: string) => {
+    navigation.navigate(tabId as any);
+  };
+
+  const handleTopUp = () => {
+    navigation.getParent()?.navigate('StudentWalletTopUp');
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -77,7 +103,10 @@ const WalletPage = () => {
         <View style={styles.balanceCard}>
           <Text style={styles.balanceLabel}>Available Balance</Text>
           <Text style={styles.balanceAmount}>$125.50</Text>
-          <TouchableOpacity style={styles.addMoneyButton}>
+          <TouchableOpacity 
+            style={styles.addMoneyButton} 
+            onPress={handleTopUp} // FIXED: Use the correct handler
+          >
             <Text style={styles.addMoneyButtonText}>Add Money</Text>
           </TouchableOpacity>
         </View>
@@ -89,33 +118,23 @@ const WalletPage = () => {
             {pendingPayments.map(payment => (
               <View key={payment.id} style={styles.paymentItem}>
                 <View style={styles.paymentInfo}>
-                  <Text style={styles.paymentTitle}>{payment.title}</Text>
-                  <Text style={styles.paymentDate}>Due: {payment.dueDate}</Text>
+                  <Text style={styles.paymentDate}>{payment.dueDate}</Text>
                 </View>
-                <Text style={styles.pendingAmount}>{payment.amount}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        {/* Transaction History */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Recent Transactions</Text>
-          <View style={styles.sectionContent}>
-            {transactions.map(transaction => (
-              <View key={transaction.id} style={styles.transactionItem}>
-                <View style={styles.transactionInfo}>
-                  <Text style={styles.transactionTitle}>{transaction.title}</Text>
-                  <Text style={styles.transactionDate}>{transaction.date}</Text>
-                </View>
-                <Text style={[styles.transactionAmount, { color: getAmountColor(transaction.type) }]}>
-                  {transaction.amount}
+                <Text style={styles.pendingAmount}>
+                  {payment.amount}
                 </Text>
               </View>
             ))}
           </View>
         </View>
       </ScrollView>
+
+      {/* Add BottomNavigation here */}
+      <BottomNavigation
+        activeTab="StudentWallet"
+        onTabPress={handleTabPress}
+        tabs={studentTabs}
+      />
     </View>
   );
 };
@@ -236,4 +255,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default WalletPage;
+export default StudentWalletPage;

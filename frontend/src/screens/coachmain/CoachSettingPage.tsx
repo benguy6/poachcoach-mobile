@@ -1,3 +1,4 @@
+// CoachSettingsPage.tsx
 import React from 'react';
 import {
   View,
@@ -21,13 +22,13 @@ import {
   ChevronRight,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
-import * as SecureStore from 'expo-secure-store'; // If you use SecureStore
+import * as SecureStore from 'expo-secure-store';
 
 interface NotificationOptions {
   [key: string]: boolean;
 }
 
-interface SettingsPageProps {
+interface CoachSettingsPageProps {
   onBack: () => void;
   onEditProfile: () => void;
   darkMode: boolean;
@@ -38,7 +39,7 @@ interface SettingsPageProps {
   ) => void;
 }
 
-const SettingsPage: React.FC<SettingsPageProps> = ({
+const CoachSettingsPage: React.FC<CoachSettingsPageProps> = ({
   onBack,
   onEditProfile,
   darkMode,
@@ -49,15 +50,13 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
   const navigation = useNavigation<any>();
 
   const handleSignOut = async () => {
-    // Clear stored credentials (adjust if you use AsyncStorage or other)
-    await SecureStore.deleteItemAsync("accessToken");
-    await SecureStore.deleteItemAsync("userId");
-    await SecureStore.deleteItemAsync("userEmail");
-    await SecureStore.deleteItemAsync("userRole");
-    // Navigate to Login screen
+    await SecureStore.deleteItemAsync('accessToken');
+    await SecureStore.deleteItemAsync('userId');
+    await SecureStore.deleteItemAsync('userEmail');
+    await SecureStore.deleteItemAsync('userRole');
     navigation.reset({
       index: 0,
-      routes: [{ name: "Login" }],
+      routes: [{ name: 'Login' }],
     });
   };
 
@@ -73,7 +72,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
       <Section title="Account">
         <Row title="Edit Profile" icon={<User size={18} />} onPress={onEditProfile} />
         <Row title="Change Password" icon={<Lock size={18} />} onPress={() => {}} />
-        <Row title="Payment Methods" icon={<CreditCard size={18} />} onPress={() => {}} />
+        <Row title="Payment Info" icon={<CreditCard size={18} />} onPress={() => {}} />
       </Section>
 
       <Section title="Notifications">
@@ -203,4 +202,4 @@ const styles = StyleSheet.create({
   rightText: { color: '#999', fontSize: 12 },
 });
 
-export default SettingsPage;
+export default CoachSettingsPage;

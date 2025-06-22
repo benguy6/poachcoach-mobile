@@ -248,7 +248,7 @@ router.post('/login', async (req, res) => {
     .from("Coaches")
     .select("id, has_uploaded_qualifications")
     .eq("id", user.id)
-    .maybeSingle(); // Will return null if not a coach
+    .single(); // Will return null if not a coach
 
   return res.status(200).json({
     message: 'Login successful',
@@ -312,44 +312,32 @@ router.post('/reset-password', verifySupabaseToken, async (req, res) => {
 
 
 router.get('/me', verifySupabaseToken, async (req, res) => {
-  const userId = req.user?.id;
+  try {
+    const userId = req.user.id;
 
-  if (!userId) {
-    return res.status(400).json({ error: 'User ID missing from request' });
+    // Check Coaches table
+    const { data: coach, error: coachError } = await supabase
+      .from('Coaches')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (coach) return res.json({ role: "coach" });
+
+    // Check Students table
+    const { data: student, error: studentError } = await supabase
+      .from('Students')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (student) return res.json({ role: "student" });
+
+    return res.json({ role: "unknown" });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Internal server error" });
   }
-
-  const { data: user, error: userError } = await supabase
-    .from('Users')
-    .select('*')
-    .eq('id', userId)
-    .Single();
-
-  if (userError || !user) {
-    return res.status(404).json({ error: 'User not found' });
-  }
-
-  const { data: coach } = await supabase
-    .from('Coaches')
-    .select('id')
-    .eq('id', userId)
-    .Single();
-
-  const { data: student } = await supabase
-    .from('Students')
-    .select('id')
-    .eq('id', userId)
-    .Single();
-
-  let role = 'unknown';
-  if (coach) role = 'coach';
-  else if (student) role = 'student';
-
-  return res.json({
-    id: user.id,
-    first_name: user.first_name,
-    email: user.email,
-    role,
-  });
 });
 
 module.exports = router;

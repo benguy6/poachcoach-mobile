@@ -10,13 +10,15 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import * as SecureStore from "expo-secure-store";
-import { login } from "../../services/api";
+import axios from "axios";
+import { login, BACKEND_URL } from "../../services/api";
 
 export default function LoginScreen() {
   const navigation = useNavigation<any>();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -24,24 +26,76 @@ export default function LoginScreen() {
       return;
     }
 
+    setIsLoading(true);
+    setError("");
+
     try {
+      // Step 1: Authenticate user via backend
       const result = await login(email, password);
       const session = result.session;
       const user = session?.user;
 
       if (!user?.email_confirmed_at) {
         Alert.alert("Email Not Verified", "Please verify your email before logging in.");
+        setIsLoading(false);
         return;
       }
 
+      const accessToken = session.access_token;
+
+      // Step 2: Store session data
+      await SecureStore.setItemAsync("accessToken", accessToken);
       await SecureStore.setItemAsync("userId", user.id);
       await SecureStore.setItemAsync("userEmail", user.email);
 
-      navigation.navigate("StudentDashboard");
+      // ✅ Step 3: Get role from backend
+      const roleResponse = await axios.get(`${BACKEND_URL}/api/user/me`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      // Type assertion to tell TypeScript the expected shape
+      const { role } = roleResponse.data as { role: string };
+      await SecureStore.setItemAsync("userRole", role);
+
+      // ✅ Step 4: Navigate based on role
+      if (role === "student") {
+        navigation.reset({
+          index: 0,
+          routes: [
+            {
+              name: "MainApp",
+              params: {
+                screen: "StudentTabs",
+                params: { screen: "StudentHome" },
+              },
+            },
+          ],
+        });
+      } else if (role === "coach") {
+        navigation.reset({
+          index: 0,
+          routes: [
+            {
+              name: "CoachMainApp",
+              params: {
+                screen: "CoachTabs",
+                params: { screen: "CoachHome" },
+              },
+            },
+          ],
+        });
+      } else {
+        Alert.alert("Login Error", "Unknown user role. Please contact support.");
+        await SecureStore.deleteItemAsync("accessToken");
+        await SecureStore.deleteItemAsync("userId");
+        await SecureStore.deleteItemAsync("userEmail");
+      }
 
     } catch (err: any) {
       console.error("Login error:", err.message);
-      setError(err.message || "Login failed.");
+      setError(err.message || "Login failed. Please check your credentials.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -64,6 +118,7 @@ export default function LoginScreen() {
         placeholderTextColor="#999"
         autoCapitalize="none"
         keyboardType="email-address"
+        editable={!isLoading}
       />
 
       <Text style={styles.inputLabel}>Password</Text>
@@ -74,12 +129,19 @@ export default function LoginScreen() {
         secureTextEntry
         style={styles.input}
         placeholderTextColor="#999"
+        editable={!isLoading}
       />
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-        <Text style={styles.loginText}>Login</Text>
+      <TouchableOpacity
+        style={[styles.loginButton, isLoading && styles.disabledButton]}
+        onPress={handleLogin}
+        disabled={isLoading}
+      >
+        <Text style={styles.loginText}>
+          {isLoading ? "Logging in..." : "Login"}
+        </Text>
       </TouchableOpacity>
 
       <Text style={styles.or}>or</Text>
@@ -87,24 +149,27 @@ export default function LoginScreen() {
       <TouchableOpacity
         style={styles.googleButton}
         onPress={() => Alert.alert("Google Sign-In coming soon!")}
+        disabled={isLoading}
       >
         <Text>Continue with Google</Text>
       </TouchableOpacity>
 
       <View style={styles.divider} />
 
-      <Text style={styles.signupPrompt}>Haven’t signed up?</Text>
+      <Text style={styles.signupPrompt}>Haven't signed up?</Text>
 
       <View style={styles.bottomButtons}>
         <TouchableOpacity
           style={styles.becomeCoach}
           onPress={() => navigation.navigate("CoachSignup1")}
+          disabled={isLoading}
         >
           <Text style={styles.buttonText}>Become a Coach</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.becomeStudent}
           onPress={() => navigation.navigate("StudentSignup1")}
+          disabled={isLoading}
         >
           <Text style={styles.buttonText}>Become a Student</Text>
         </TouchableOpacity>
@@ -151,6 +216,7 @@ const styles = StyleSheet.create({
   error: {
     color: "red",
     marginVertical: 6,
+    textAlign: "center",
   },
   loginButton: {
     backgroundColor: "#ff6a00",
@@ -159,6 +225,9 @@ const styles = StyleSheet.create({
     width: "100%",
     alignItems: "center",
     marginVertical: 8,
+  },
+  disabledButton: {
+    backgroundColor: "#ccc",
   },
   loginText: {
     color: "#fff",
@@ -213,7 +282,3 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
 });
-
-
-
-

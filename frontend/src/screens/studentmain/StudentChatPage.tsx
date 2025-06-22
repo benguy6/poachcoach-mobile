@@ -7,8 +7,16 @@ import {
   Image,
   StyleSheet,
 } from 'react-native';
+import BottomNavigation from '../../components/BottomNavigation';
+import { studentTabs } from '../../constants/studentTabs';
 
-const ChatPage = () => {
+import type { StackNavigationProp } from '@react-navigation/stack';
+
+type StudentChatPageProps = {
+  navigation: StackNavigationProp<any>;
+};
+
+const StudentChatPage = ({ navigation }: StudentChatPageProps) => {
   const chats = [
     {
       id: 1,
@@ -44,6 +52,11 @@ const ChatPage = () => {
     }
   ];
 
+  // Handler for tab press
+  const handleTabPress = (tabId: string) => {
+    navigation.navigate(tabId);
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -71,6 +84,12 @@ const ChatPage = () => {
           </TouchableOpacity>
         ))}
       </ScrollView>
+
+      <BottomNavigation
+        activeTab="StudentChat"
+        onTabPress={handleTabPress}
+        tabs={studentTabs}
+      />
     </View>
   );
 };
@@ -150,4 +169,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default ChatPage;
+export default StudentChatPage;

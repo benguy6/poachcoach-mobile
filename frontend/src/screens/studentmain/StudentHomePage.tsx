@@ -57,34 +57,42 @@ const HomePage: React.FC<HomePageProps> = ({ navigation }) => {
         // Already on home, maybe refresh or scroll to top
         break;
       case 'calendar':
-        navigation.navigate('Calendar');
+        navigation.navigate('StudentCalendar');
         break;
       case 'booking':
-        navigation.navigate('Booking');
+        navigation.navigate('StudentBooking');
         break;
       case 'chat':
-        navigation.navigate('Chat');
+        navigation.navigate('StudentChat');
         break;
       case 'wallet':
-        navigation.navigate('Wallet');
+        navigation.navigate('StudentWallet');
         break;
       default:
         break;
     }
   };
 
-  const handleMenuPress = () => {
-    // Open side drawer or navigate to settings
-    navigation.navigate('Settings');
+  const handleSettingsPress = () => {
+    navigation.navigate('StudentSettings');
   };
 
   const handleNotificationPress = () => {
-    navigation.navigate('Notifications');
+    navigation.navigate('StudentNotifications');
   };
 
   const handleProfilePress = () => {
-    navigation.navigate('Profile');
+    navigation.navigate('StudentProfile');
   };
+
+  const studentTabs = [
+  { id: 'StudentHome', icon: 'home' as keyof typeof Ionicons.glyphMap, iconOutline: 'home-outline' as keyof typeof Ionicons.glyphMap },
+  { id: 'StudentCalendar', icon: 'calendar' as keyof typeof Ionicons.glyphMap, iconOutline: 'calendar-outline' as keyof typeof Ionicons.glyphMap },
+  { id: 'StudentBooking', icon: 'add' as keyof typeof Ionicons.glyphMap, iconOutline: 'add' as keyof typeof Ionicons.glyphMap, isCenter: true },
+  { id: 'StudentChat', icon: 'chatbubble' as keyof typeof Ionicons.glyphMap, iconOutline: 'chatbubble-outline' as keyof typeof Ionicons.glyphMap },
+  { id: 'StudentWallet', icon: 'wallet' as keyof typeof Ionicons.glyphMap, iconOutline: 'wallet-outline' as keyof typeof Ionicons.glyphMap },
+];
+
 
   return (
     <SafeAreaView style={styles.container}>
@@ -97,8 +105,8 @@ const HomePage: React.FC<HomePageProps> = ({ navigation }) => {
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={handleMenuPress} style={styles.headerButton}>
-            <Ionicons name="menu" size={28} color="white" />
+          <TouchableOpacity onPress={handleSettingsPress} style={styles.headerButton}>
+            <Ionicons name="settings" size={28} color="white" />
           </TouchableOpacity>
           
           <TouchableOpacity 
@@ -131,46 +139,64 @@ const HomePage: React.FC<HomePageProps> = ({ navigation }) => {
           </View>
         </TouchableOpacity>
 
-        {/* Stats Cards */}
-        <View style={styles.statsContainer}>
-          <View style={styles.statsRow}>
-            <TouchableOpacity style={styles.statCard}>
-              <Text style={styles.statLabel}>Level</Text>
-              <Text style={styles.statValue}>Intermediate</Text>
-              <Text style={styles.statSubtext}>Next test in 20:19:23</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.statCard}>
-              <Text style={styles.statLabel}>Awards</Text>
-              <Text style={styles.statValue}>4</Text>
-              <Text style={styles.statSubtext}>+33% month over month</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Upcoming Classes Card */}
+        {/* Content Container */}
+        <View style={styles.contentContainer}>
+          {/* Upcoming Class Card */}
           <View style={styles.upcomingCard}>
-            <View style={styles.cardHeader}>
-              <Text style={styles.cardLabel}>Upcoming Classes</Text>
-              <TouchableOpacity onPress={() => navigation.navigate('Calendar')}>
-                <Text style={styles.viewAllText}>View All</Text>
-              </TouchableOpacity>
-            </View>
+            <Text style={styles.upcomingTitle}>Upcoming Class</Text>
             
-            <TouchableOpacity style={styles.upcomingContent}>
-              <Text style={styles.upcomingTime}>20 Sep 9:30am</Text>
-              <Text style={styles.upcomingDetails}>Cricket class with Coach Shreyas</Text>
-              <View style={styles.upcomingFooter}>
-                <Ionicons name="location-outline" size={14} color="#9ca3af" />
-                <Text style={styles.upcomingLocation}>Sports Complex A</Text>
+            {/* Confirmation Banner */}
+            <View style={styles.confirmationBanner}>
+              <View style={styles.checkIcon}>
+                <Ionicons name="checkmark" size={16} color="white" />
               </View>
-            </TouchableOpacity>
+              <View style={styles.confirmationText}>
+                <Text style={styles.confirmationTitle}>Your class is confirmed!</Text>
+                <Text style={styles.confirmationSubtitle}>Yoga Basics with Sarah Johnson</Text>
+              </View>
+            </View>
+
+            {/* Class Details */}
+            <View style={styles.classDetails}>
+              <View style={styles.classHeader}>
+                <Text style={styles.className}>Yoga Basics</Text>
+                <View style={styles.todayBadge}>
+                  <Text style={styles.todayText}>Today</Text>
+                </View>
+              </View>
+              <Text style={styles.instructorName}>With Sarah Johnson</Text>
+              
+              <View style={styles.classInfo}>
+                <View style={styles.infoRow}>
+                  <Ionicons name="time-outline" size={16} color="#6b7280" />
+                  <Text style={styles.infoText}>10:00 AM - 11:00 AM</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Ionicons name="location-outline" size={16} color="#6b7280" />
+                  <Text style={styles.infoText}>Wellness Studio, 123 Main Street</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Ionicons name="people-outline" size={16} color="#6b7280" />
+                  <Text style={styles.infoText}>15 people attending</Text>
+                </View>
+              </View>
+
+              <View style={styles.buttonRow}>
+                <TouchableOpacity style={styles.viewDetailsButton}>
+                  <Text style={styles.viewDetailsText}>View Details</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.cancelButton}>
+                  <Text style={styles.cancelText}>Cancel Class</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
 
           {/* Recent Messages Card */}
           <View style={styles.messagesCard}>
             <View style={styles.cardHeader}>
               <Text style={styles.cardLabel}>Recent Messages</Text>
-              <TouchableOpacity onPress={() => navigation.navigate('Chat')}>
+              <TouchableOpacity onPress={() => navigation.navigate('StudentChat')}>
                 <Text style={styles.viewAllText}>View All</Text>
               </TouchableOpacity>
             </View>
@@ -179,7 +205,7 @@ const HomePage: React.FC<HomePageProps> = ({ navigation }) => {
               <TouchableOpacity 
                 key={chat.id} 
                 style={styles.chatItem}
-                onPress={() => navigation.navigate('ChatDetail', { chatId: chat.id })}
+                onPress={() => navigation.navigate('StudentChatDetail', { chatId: chat.id })}
               >
                 <Image source={{ uri: chat.avatar }} style={styles.chatAvatar} />
                 <View style={styles.chatContent}>
@@ -204,7 +230,11 @@ const HomePage: React.FC<HomePageProps> = ({ navigation }) => {
         </View>
       </ScrollView>
 
-      <BottomNavigation activeTab={activeTab} onTabPress={handleTabPress} />
+      <BottomNavigation
+        activeTab="StudentHome"
+        onTabPress={tabId => navigation.navigate(tabId)}
+        tabs={studentTabs}
+      />
     </SafeAreaView>
   );
 };
@@ -279,57 +309,148 @@ const styles = StyleSheet.create({
     color: '#fed7aa',
     marginTop: 4,
   },
-  statsContainer: {
+  contentContainer: {
     paddingHorizontal: 20,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 16,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  statLabel: {
-    fontSize: 14,
-    color: '#6b7280',
-    fontWeight: '600',
-  },
-  statValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginTop: 4,
-  },
-  statSubtext: {
-    fontSize: 12,
-    color: '#9ca3af',
-    marginTop: 4,
+    paddingTop: 40, // add top padding for floating effect
   },
   upcomingCard: {
     backgroundColor: 'white',
     borderRadius: 12,
-    padding: 16,
+    padding: 0,
     marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 8,
+    overflow: 'visible',
+    marginTop: -40,
+    zIndex: 2,
+  },
+  upcomingTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1f2937',
+    padding: 16,
+    paddingBottom: 12,
+  },
+  confirmationBanner: {
+    backgroundColor: '#dcfce7',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 8,
+  },
+  checkIcon: {
+    backgroundColor: '#22c55e',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  confirmationText: {
+    flex: 1,
+  },
+  confirmationTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#166534',
+  },
+  confirmationSubtitle: {
+    fontSize: 13,
+    color: '#166534',
+    marginTop: 2,
+  },
+  classDetails: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  classHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  className: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1f2937',
+  },
+  todayBadge: {
+    backgroundColor: '#f97316',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  todayText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'white',
+  },
+  instructorName: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginBottom: 16,
+  },
+  classInfo: {
+    marginBottom: 20,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  infoText: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginLeft: 8,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  viewDetailsButton: {
+    flex: 1,
+    backgroundColor: '#fb923c', // darker orange
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  viewDetailsText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  cancelButton: {
+    flex: 1,
+    backgroundColor: '#ef4444', // red
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  cancelText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  messagesCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 8,
+    marginTop: 24,
+    marginBottom: 16,
+    overflow: 'visible',
+    zIndex: 1,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -346,44 +467,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#f97316',
     fontWeight: '600',
-  },
-  upcomingContent: {
-    borderLeftWidth: 3,
-    borderLeftColor: '#f97316',
-    paddingLeft: 12,
-  },
-  upcomingTime: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1f2937',
-  },
-  upcomingDetails: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginTop: 4,
-  },
-  upcomingFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  upcomingLocation: {
-    fontSize: 12,
-    color: '#9ca3af',
-    marginLeft: 4,
-  },
-  messagesCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
   chatItem: {
     flexDirection: 'row',

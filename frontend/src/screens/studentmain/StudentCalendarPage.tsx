@@ -8,6 +8,8 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import BottomNavigation from '../../components/BottomNavigation';
+import { studentTabs } from '../../constants/studentTabs';
 
 const CalendarPage = ({ navigation }: { navigation: any }) => {
   const [expandedClass, setExpandedClass] = useState<number | null>(null);
@@ -79,6 +81,11 @@ const renderCalendarDay = (day: number): React.ReactElement => {
         </TouchableOpacity>
     );
 };
+
+  // Add this handler
+  const handleTabPress = (tabId: string) => {
+    navigation.navigate(tabId);
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -164,6 +171,12 @@ const renderCalendarDay = (day: number): React.ReactElement => {
           ))}
         </View>
       </ScrollView>
+      {/* Add BottomNavigation here */}
+      <BottomNavigation
+         activeTab="StudentCalendar"
+         onTabPress={handleTabPress}
+         tabs={studentTabs}
+        />
     </SafeAreaView>
   );
 };

@@ -7,48 +7,24 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-interface Tab {
+export type TabItem = {
   id: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  iconOutline: keyof typeof Ionicons.glyphMap;
+  icon: string;
+  iconOutline: string;
   isCenter?: boolean;
-}
+};
 
-interface BottomNavigationProps {
+export interface BottomNavigationProps {
   activeTab: string;
   onTabPress: (tabId: string) => void;
+  tabs: TabItem[];
 }
 
-const BottomNavigation: React.FC<BottomNavigationProps> = ({ activeTab, onTabPress }) => {
-  const tabs: Tab[] = [
-    {
-      id: 'home',
-      icon: 'home',
-      iconOutline: 'home-outline',
-    },
-    {
-      id: 'calendar',
-      icon: 'calendar',
-      iconOutline: 'calendar-outline',
-    },
-    {
-      id: 'booking',
-      icon: 'add',
-      iconOutline: 'add',
-      isCenter: true,
-    },
-    {
-      id: 'chat',
-      icon: 'chatbubble',
-      iconOutline: 'chatbubble-outline',
-    },
-    {
-      id: 'wallet',
-      icon: 'wallet',
-      iconOutline: 'wallet-outline',
-    },
-  ];
-
+const BottomNavigation: React.FC<BottomNavigationProps> = ({
+  activeTab,
+  onTabPress,
+  tabs,
+}) => {
   return (
     <View style={styles.container}>
       <View style={styles.tabContainer}>
@@ -65,11 +41,11 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({ activeTab, onTabPre
           >
             <Ionicons
               name={
-                tab.isCenter
+                (tab.isCenter
                   ? tab.icon
                   : activeTab === tab.id
                   ? tab.icon
-                  : tab.iconOutline
+                  : tab.iconOutline) as React.ComponentProps<typeof Ionicons>['name']
               }
               size={tab.isCenter ? 28 : 24}
               color={
