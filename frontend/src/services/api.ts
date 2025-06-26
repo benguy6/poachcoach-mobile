@@ -1,4 +1,4 @@
-export const BACKEND_URL = "http://192.168.1.17:3000"; // Update as needed
+export const BACKEND_URL = "http://172.20.10.3:3000"; // Update as needed
 
 async function post(endpoint: string, body: any) {
   const url = `${BACKEND_URL}${endpoint}`;
@@ -99,6 +99,13 @@ export const login = async (email: string, password: string) => {
 
 export const checkEmailExists = async (email: string) => {
   return await post("/api/user/request-reset-password", { email });
+};
+
+export const getCoachDashboard = async (token: string) => {
+  const res = await fetch(`${BACKEND_URL}/api/coach_dashboard/`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return res.json();
 };
 
 

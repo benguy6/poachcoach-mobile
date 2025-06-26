@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { getCoachDashboard } from '../../services/api';
+import { getToken } from '../../services/auth';
 
 import type { StackNavigationProp } from '@react-navigation/stack';
 
@@ -19,6 +21,27 @@ type CoachHomePageProps = {
 
 const CoachHomePage = ({ navigation }: CoachHomePageProps) => {
   const [notifications] = useState(2);
+  const [coach, setCoach] = useState(null);
+  const [sessions, setSessions] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+  const fetchDashboard = async () => {
+    setLoading(true);
+    const token = await getToken();
+    if (!token) {
+      console.warn('No token found');
+      setLoading(false);
+      return;
+    }
+    const data = await getCoachDashboard(token);
+    setCoach(data.coach);
+    setSessions(data.confirmedSessions);
+    setLoading(false);
+  };
+  fetchDashboard();
+}, []);
+
 
   return (
     <SafeAreaView style={styles.container}>
@@ -216,3 +239,4 @@ const styles = StyleSheet.create({
 });
 
 export default CoachHomePage;
+
