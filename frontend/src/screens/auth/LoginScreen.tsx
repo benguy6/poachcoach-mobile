@@ -12,6 +12,7 @@ import { useNavigation } from "@react-navigation/native";
 import * as SecureStore from "expo-secure-store";
 import axios from "axios";
 import { login, BACKEND_URL } from "../../services/api";
+import { supabase } from "../../services/supabase";
 
 export default function LoginScreen() {
   const navigation = useNavigation<any>();
@@ -56,6 +57,12 @@ export default function LoginScreen() {
       // Type assertion to tell TypeScript the expected shape
       const { role } = roleResponse.data as { role: string };
       await SecureStore.setItemAsync("userRole", role);
+
+      // Set supabase session
+      await supabase.auth.setSession({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+      });
 
       // ✅ Step 4: Navigate based on role
       if (role === "student") {

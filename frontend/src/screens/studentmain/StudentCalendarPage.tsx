@@ -1,366 +1,468 @@
 import React, { useState } from 'react';
 import {
+  SafeAreaView,
   View,
   Text,
-  ScrollView,
   TouchableOpacity,
+  ScrollView,
   StyleSheet,
-  SafeAreaView,
+  Alert,
+  Dimensions,
+  Modal,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import BottomNavigation from '../../components/BottomNavigation';
+// @ts-ignore
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { studentTabs } from '../../constants/studentTabs';
+import BottomNavigation from '../../components/BottomNavigation';
 
-const CalendarPage = ({ navigation }: { navigation: any }) => {
-  const [expandedClass, setExpandedClass] = useState<number | null>(null);
+const { width } = Dimensions.get('window');
 
-  const upcomingClasses = [
+const monthNames = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+
+// Dummy class schedule for demonstration
+const classSchedule: Record<number, Array<{
+  title: string;
+  time: string;
+  instructor: string;
+  location: string;
+  attendees: number;
+}>> = {
+  16: [
     {
-      id: 1,
       title: 'Yoga Basics',
-      instructor: 'Sarah Johnson',
-      date: '2025-06-17',
-      time: '10:00 AM - 11:00 AM',
-      location: 'Wellness Studio, 123 Main Street',
-      attendees: 15,
-      status: 'confirmed'
+      time: '10:00 AM',
+      instructor: 'Coach Smith',
+      location: 'Room 101',
+      attendees: 8,
     },
     {
-      id: 2,
-      title: 'Pilates Core',
-      instructor: 'Michael Chen',
-      date: '2025-06-18',
-      time: '2:00 PM - 3:00 PM',
-      location: 'Fitness Center',
-      attendees: 8,
-      status: 'pending'
-    }
-  ];
+      title: 'Basketball Drills',
+      time: '2:00 PM',
+      instructor: 'Coach Lee',
+      location: 'Court 2',
+      attendees: 12,
+    },
+  ],
+  18: [
+    {
+      title: 'Swimming',
+      time: '9:00 AM',
+      instructor: 'Coach Kim',
+      location: 'Pool',
+      attendees: 5,
+    },
+  ],
+};
 
-  const getDaysInMonth = () => {
+// Fake all upcoming classes for demo
+const fakeAllUpcomingClasses = [
+  {
+    title: 'Yoga Basics',
+    time: '10:00 AM, June 16, 2025',
+    instructor: 'Coach Smith',
+    location: 'Room 101',
+    attendees: 8,
+  },
+  {
+    title: 'Basketball Drills',
+    time: '2:00 PM, June 16, 2025',
+    instructor: 'Coach Lee',
+    location: 'Court 2',
+    attendees: 12,
+  },
+  {
+    title: 'Swimming',
+    time: '9:00 AM, June 18, 2025',
+    instructor: 'Coach Kim',
+    location: 'Pool',
+    attendees: 5,
+  },
+];
+
+const StudentCalendarPage = ({ navigation }: { navigation: any }) => {
+  const [currentDate, setCurrentDate] = useState(new Date(2025, 5, 1));
+  const [selectedDate, setSelectedDate] = useState(16);
+  const [showAllClassesModal, setShowAllClassesModal] = useState(false);
+
+  const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
+  const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
+
+  const renderCalendar = () => {
     const days = [];
-    for (let i = 1; i <= 30; i++) {
-      days.push(i);
+    for (let i = 0; i < firstDayOfMonth; i++) {
+      days.push(<View key={`empty-${i}`} style={styles.calendarEmptyCell} />);
     }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const hasClasses = classSchedule[day];
+      const isToday = currentDate.getMonth() === new Date().getMonth() && day === new Date().getDate();
+      const isSelected = day === selectedDate;
+
+      days.push(
+        <TouchableOpacity
+          key={day}
+          onPress={() => setSelectedDate(day)}
+          style={[
+            styles.calendarDay,
+            isSelected && styles.calendarDaySelected,
+            isToday && styles.calendarDayToday,
+            hasClasses && styles.calendarDayHasClass
+          ]}
+        >
+          <Text style={[
+            styles.calendarDayText,
+            isSelected ? { color: '#fff' } : hasClasses ? { color: '#ea580c' } : {}
+          ]}>
+            {day}
+          </Text>
+        </TouchableOpacity>
+      );
+    }
+
     return days;
   };
 
-interface UpcomingClass {
-    id: number;
-    title: string;
-    instructor: string;
-    date: string;
-    time: string;
-    location: string;
-    attendees: number;
-    status: string;
-}
-
-const renderCalendarDay = (day: number): React.ReactElement => {
-    const isToday = day === 16;
-    const hasClass = [17, 18].includes(day);
-    
-    return (
-        <TouchableOpacity
-            key={day}
-            style={[
-                styles.calendarDay,
-                isToday && styles.todayStyle,
-                hasClass && styles.classDayStyle,
-            ]}
-        >
-            <Text
-                style={[
-                    styles.calendarDayText,
-                    isToday && styles.todayText,
-                    hasClass && styles.classDayText,
-                ]}
-            >
-                {day}
-            </Text>
-        </TouchableOpacity>
+  const handleCancel = (title: string) => {
+    Alert.alert(
+      'Cancel Class',
+      `Are you sure you want to cancel "${title}"?`,
+      [
+        { text: 'No', style: 'cancel' },
+        { text: 'Yes', onPress: () => {/* Add cancel logic here */} },
+      ]
     );
-};
+  };
 
-  // Add this handler
-  const handleTabPress = (tabId: string) => {
-    navigation.navigate(tabId);
+  const handleAddClass = () => {
+    // Navigate to booking or class creation page
+    navigation.navigate('StudentBooking');
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={24} color="black" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Calendar</Text>
-          <View style={styles.headerSpacer} />
-        </View>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={24} color="black" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Calendar</Text>
+        <View style={{ width: 24 }} />
+      </View>
 
-        {/* Mini Calendar */}
-        <View style={styles.calendarContainer}>
-          <Text style={styles.calendarTitle}>June 2025</Text>
-          
-          {/* Week Days */}
-          <View style={styles.weekDaysContainer}>
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-              <View key={day} style={styles.weekDay}>
-                <Text style={styles.weekDayText}>{day}</Text>
-              </View>
+      <ScrollView style={styles.scroll}>
+        {/* Calendar UI */}
+        <View style={styles.calendarCard}>
+          <View style={styles.monthNav}>
+            <TouchableOpacity
+              onPress={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))}
+            >
+              <Ionicons name="chevron-back" size={20} color="#6b7280" />
+            </TouchableOpacity>
+            <Text style={styles.monthLabel}>
+              {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
+            </Text>
+            <TouchableOpacity
+              onPress={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))}
+            >
+              <Ionicons name="chevron-forward" size={20} color="#6b7280" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.daysOfWeekRow}>
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+              <Text key={day} style={styles.dayOfWeekText}>{day}</Text>
             ))}
           </View>
 
-          {/* Calendar Grid */}
           <View style={styles.calendarGrid}>
-            {getDaysInMonth().map(renderCalendarDay)}
+            {renderCalendar()}
           </View>
         </View>
 
-        {/* Upcoming Classes */}
-        <View style={styles.classesContainer}>
-          <Text style={styles.sectionTitle}>Upcoming Classes</Text>
-          
-          {upcomingClasses.map(classItem => (
-            <View key={classItem.id} style={styles.classCard}>
-              <TouchableOpacity
-                style={styles.classHeader}
-                onPress={() => setExpandedClass(
-                  expandedClass === classItem.id ? null : classItem.id
-                )}
-              >
-                <View style={styles.classInfo}>
-                  <Text style={styles.classTitle}>{classItem.title}</Text>
-                  <Text style={styles.classInstructor}>with {classItem.instructor}</Text>
-                  <Text style={styles.classTime}>{classItem.time}</Text>
+        {/* Class Cards */}
+        <View style={styles.classesSection}>
+          <View style={styles.classesTitleRow}>
+            <Text style={styles.classesTitle}>
+              Classes on June {selectedDate}, 2025
+            </Text>
+            <TouchableOpacity
+              style={styles.viewAllSmallButton}
+              onPress={() => setShowAllClassesModal(true)}
+            >
+              <Text style={styles.viewAllSmallButtonText}>View All</Text>
+            </TouchableOpacity>
+          </View>
+          {classSchedule[selectedDate] ? (
+            <>
+              {classSchedule[selectedDate].map((item, index) => (
+                <View key={index} style={styles.classCard}>
+                  <Text style={styles.classTitle}>{item.title}</Text>
+                  <Text style={styles.classTime}>{item.time} with {item.instructor}</Text>
+                  <Text style={styles.classDetails}>Location: {item.location}</Text>
+                  <Text style={styles.classDetails}>{item.attendees} people attending</Text>
+                  <TouchableOpacity
+                    style={styles.cancelButton}
+                    onPress={() => handleCancel(item.title)}
+                  >
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
                 </View>
-                <Ionicons 
-                  name={expandedClass === classItem.id ? "chevron-up" : "chevron-down"} 
-                  size={20} 
-                  color="#6b7280" 
-                />
+              ))}
+            </>
+          ) : (
+            <View style={styles.noClassView}>
+              <Text style={styles.noClassText}>No classes scheduled.</Text>
+              <TouchableOpacity style={styles.addClassButton} onPress={handleAddClass}>
+                <Text style={styles.addClassButtonText}>Add Class</Text>
               </TouchableOpacity>
-              
-              {expandedClass === classItem.id && (
-                <View style={styles.classDetails}>
-                  <View style={styles.detailItem}>
-                    <Ionicons name="location" size={16} color="#9ca3af" />
-                    <Text style={styles.detailText}>{classItem.location}</Text>
-                  </View>
-                  <View style={styles.detailItem}>
-                    <Ionicons name="people" size={16} color="#9ca3af" />
-                    <Text style={styles.detailText}>{classItem.attendees} people attending</Text>
-                  </View>
-                  <View style={styles.detailItem}>
-                    <Ionicons name="time" size={16} color="#9ca3af" />
-                    <Text style={styles.detailText}>Status: {classItem.status}</Text>
-                  </View>
-                  
-                  <View style={styles.classActions}>
-                    <TouchableOpacity style={styles.primaryButton}>
-                      <Text style={styles.primaryButtonText}>View Details</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.secondaryButton}>
-                      <Text style={styles.secondaryButtonText}>Cancel</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
             </View>
-          ))}
+          )}
         </View>
       </ScrollView>
-      {/* Add BottomNavigation here */}
+
+      {/* Modal for all upcoming classes */}
+      <Modal
+        visible={showAllClassesModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowAllClassesModal(false)}
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          justifyContent: 'center',
+          alignItems: 'center'
+        }}>
+          <View style={{
+            backgroundColor: '#fff',
+            borderRadius: 16,
+            padding: 24,
+            width: '85%',
+            maxHeight: '70%',
+          }}>
+            <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 12 }}>
+              All Upcoming Classes
+            </Text>
+            <ScrollView>
+              {fakeAllUpcomingClasses.length === 0 ? (
+                <Text>No upcoming classes found.</Text>
+              ) : (
+                fakeAllUpcomingClasses.map((item, idx) => (
+                  <View key={idx} style={{
+                    marginBottom: 16,
+                    borderBottomWidth: idx !== fakeAllUpcomingClasses.length - 1 ? 1 : 0,
+                    borderBottomColor: '#eee',
+                    paddingBottom: 8,
+                  }}>
+                    <Text style={{ fontWeight: '600', color: '#f97316' }}>{item.title}</Text>
+                    <Text style={{ color: '#6b7280' }}>{item.time} with {item.instructor}</Text>
+                    <Text style={{ color: '#6b7280' }}>Location: {item.location}</Text>
+                    <Text style={{ color: '#6b7280' }}>{item.attendees} people attending</Text>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+            <TouchableOpacity
+              style={{
+                marginTop: 16,
+                backgroundColor: '#f97316',
+                paddingVertical: 10,
+                borderRadius: 8,
+                alignItems: 'center',
+              }}
+              onPress={() => setShowAllClassesModal(false)}
+            >
+              <Text style={{ color: '#fff', fontWeight: '600' }}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <BottomNavigation
-         activeTab="StudentCalendar"
-         onTabPress={handleTabPress}
-         tabs={studentTabs}
-        />
+        activeTab="StudentCalendar"
+        onTabPress={(tabId) => navigation.navigate(tabId)}
+        tabs={studentTabs}
+      />
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f9fafb',
-  },
-  content: {
-    flex: 1,
-  },
+  container: { flex: 1, backgroundColor: '#f9fafb' },
+  scroll: { flex: 1 },
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: 'white',
+    padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
+    backgroundColor: '#fff'
   },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: 'black',
-  },
-  headerSpacer: {
-    width: 24,
-  },
-  calendarContainer: {
-    backgroundColor: 'white',
-    marginHorizontal: 20,
-    marginTop: 20,
-    borderRadius: 12,
+  headerTitle: { fontSize: 20, fontWeight: 'bold', color: 'black' },
+  calendarCard: {
+    backgroundColor: '#fff',
+    margin: 20,
     padding: 16,
+    borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 3,
     elevation: 2,
   },
-  calendarTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: 'black',
-    marginBottom: 16,
-  },
-  weekDaysContainer: {
+  monthNav: {
     flexDirection: 'row',
-    marginBottom: 8,
-  },
-  weekDay: {
-    flex: 1,
+    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
+    marginBottom: 12,
   },
-  weekDayText: {
-    fontSize: 14,
-    fontWeight: '600',
+  monthLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: 'black',
+  },
+  daysOfWeekRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  dayOfWeekText: {
     color: '#6b7280',
+    fontSize: 12,
+    fontWeight: '600',
+    width: (width - 64) / 7,
+    textAlign: 'center',
   },
   calendarGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    justifyContent: 'flex-start',
+  },
+  calendarEmptyCell: {
+    width: (width - 64) / 7,
+    height: 40,
   },
   calendarDay: {
-    width: '14.28%',
-    aspectRatio: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: (width - 64) / 7,
+    height: 40,
     borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 4,
   },
-  todayStyle: {
+  calendarDaySelected: {
     backgroundColor: '#f97316',
   },
-  classDayStyle: {
+  calendarDayToday: {
     backgroundColor: '#fed7aa',
+  },
+  calendarDayHasClass: {
+    backgroundColor: '#fef3c7',
   },
   calendarDayText: {
     fontSize: 14,
-    color: 'black',
-  },
-  todayText: {
-    color: 'white',
-    fontWeight: 'bold',
-  },
-  classDayText: {
-    color: '#ea580c',
     fontWeight: '600',
   },
-  classesContainer: {
+  classesSection: {
     paddingHorizontal: 20,
-    paddingTop: 24,
-    paddingBottom: 100,
+    marginBottom: 80,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: 'black',
-    marginBottom: 16,
-  },
-  classCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  classHeader: {
+  classesTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
+    marginVertical: 16,
   },
-  classInfo: {
-    flex: 1,
+  classesTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: 'black',
+    marginVertical: 16,
+  },
+  classCard: {
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   classTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: 'black',
-  },
-  classInstructor: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginTop: 4,
+    color: '#f97316',
+    marginBottom: 4,
   },
   classTime: {
     fontSize: 14,
-    color: '#f97316',
-    marginTop: 4,
-    fontWeight: '500',
+    color: '#6b7280',
+    marginBottom: 2,
   },
   classDetails: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
-  },
-  detailItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  detailText: {
     fontSize: 14,
     color: '#6b7280',
-    marginLeft: 8,
   },
-  classActions: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 16,
+  noClassText: {
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+    marginTop: 20,
   },
-  primaryButton: {
-    flex: 1,
-    backgroundColor: '#f97316',
-    paddingVertical: 12,
+  cancelButton: {
+    marginTop: 10,
+    paddingVertical: 8,
+    backgroundColor: '#ef4444',
     borderRadius: 8,
     alignItems: 'center',
   },
-  primaryButtonText: {
-    color: 'white',
-    fontSize: 14,
+  cancelButtonText: {
+    color: '#fff',
     fontWeight: '600',
   },
-  secondaryButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
+  viewAllButton: {
+    marginTop: 10,
+    padding: 12,
+    backgroundColor: '#f97316',
     borderRadius: 8,
     alignItems: 'center',
   },
-  secondaryButtonText: {
-    color: '#6b7280',
-    fontSize: 14,
-    fontWeight: '500',
+  viewAllButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  noClassView: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+  },
+  addClassButton: {
+    marginTop: 10,
+    backgroundColor: '#f97316',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  addClassButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  viewAllSmallButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    backgroundColor: '#f97316',
+    borderRadius: 16,
+  },
+  viewAllSmallButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 13,
   },
 });
 
-export default CalendarPage;
+export default StudentCalendarPage;

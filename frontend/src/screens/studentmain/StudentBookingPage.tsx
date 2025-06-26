@@ -30,7 +30,7 @@ import { useNavigation } from '@react-navigation/native';
 import CancelClassModal from '../../components/CancelClassModal';
 import { studentTabs } from '../../constants/studentTabs';
 import BottomNavigation from '../../components/BottomNavigation';
-
+import SelectBookeeModal from '../../components/SelectBookeeModal';
 
 const { width, height } = Dimensions.get('window');
 
@@ -44,15 +44,27 @@ const postalCodeCoordinates = {
   '570106': { latitude: 1.3441, longitude: 103.8158 }, // Tampines
 };
 
-const getCoordinatesFromPostalCode = (postalCode) => {
-  return postalCodeCoordinates[postalCode] || { latitude: 1.3521, longitude: 103.8198 };
+const getCoordinatesFromPostalCode = (postalCode: string) => {
+  return postalCodeCoordinates[postalCode as keyof typeof postalCodeCoordinates] || { latitude: 1.3521, longitude: 103.8198 };
 };
 
-const BookingPage = () => {
+interface Props {
+  route: {
+    params?: {
+      bookee?: any;
+      [key: string]: any;
+    };
+    [key: string]: any;
+  };
+}
+
+const StudentBookingPage = ({ route }: Props) => {
+  // const bookee = route?.params?.bookee;
+
   const [expandedCoach, setExpandedCoach] = useState(null);
   const [selectedCoach, setSelectedCoach] = useState(null);
   const [hasLocationPermission, setHasLocationPermission] = useState(false);
-  const [currentLocation, setCurrentLocation] = useState(null);
+  const [currentLocation, setCurrentLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [mapRegion, setMapRegion] = useState({
     latitude: 1.3521,
     longitude: 103.8198,
@@ -60,7 +72,14 @@ const BookingPage = () => {
     longitudeDelta: 0.05,
   });
   const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useState<{
+    specialty: string[];
+    maxPrice: string;
+    minRating: string;
+    availability: string;
+    groupSessions: boolean;
+    certification: string;
+  }>({
     specialty: [],
     maxPrice: '',
     minRating: '',
@@ -74,6 +93,9 @@ const BookingPage = () => {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [sessionDateTime, setSessionDateTime] = useState('2025-06-25T10:00:00'); // Replace with real session time
+  const [showBookeeModal, setShowBookeeModal] = useState(false);
+  const [bookee, setBookee] = useState<{ name?: string; type: "self" | "child" | "new-child" } | null>(route?.params?.bookee ?? null);
+
   const applySearchFilters = (customQuery?: string) => {
     const query = customQuery || tempSearchQuery;
     setSearchQuery(query);
@@ -735,11 +757,23 @@ const BookingPage = () => {
         }}
         sessionDateTime={sessionDateTime}
       />
+      <SelectBookeeModal
+        visible={showBookeeModal}
+        userName="Vansh"
+        children={[{ name: "Aanya" }]} // Replace with dynamic children later
+        onClose={() => setShowBookeeModal(false)}
+        onSelect={(selected) => {
+          setBookee(selected);
+          setShowBookeeModal(false);
+          // You can navigate or update state as needed
+          // navigation.navigate('BookingPage', { bookee: selected });
+        }}
+      />
       <BottomNavigation
-  activeTab="StudentChat"
-  onTabPress={handleTabPress}
-  tabs={studentTabs}
-/>
+        activeTab="StudentBooking"
+        onTabPress={handleTabPress}
+        tabs={studentTabs}
+      />
     </View>
   );
 };
@@ -1247,4 +1281,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default BookingPage;
+export default StudentBookingPage;

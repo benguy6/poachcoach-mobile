@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useRef } from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import BottomNavigation from "./components/BottomNavigation";
 import * as Linking from "expo-linking";
 import { studentTabs } from "./constants/studentTabs";
+import SelectBookeeModal from "./components/SelectBookeeModal";
 
 // Auth Screens
 import EntryPage from "./screens/auth/EntryPage";
@@ -107,48 +108,104 @@ const CoachMainStack = createNativeStackNavigator<CoachMainStackParamList>();
 
 // Student Bottom Tab Navigator
 
-const StudentTabs = () => (
-  <Tab.Navigator
-    screenOptions={{ headerShown: false }}
-    tabBar={({ navigation, state }) => (
-      <BottomNavigation
-        activeTab={state.routeNames[state.index]}
-        onTabPress={(tabId) => navigation.navigate(tabId)}
-        tabs={studentTabs}
-      />
-    )}
-  >
-    <Tab.Screen name="StudentHome" component={StudentHomePage} />
-    <Tab.Screen name="StudentCalendar" component={StudentCalendarPage} />
-    <Tab.Screen name="StudentBooking" component={StudentBookingPage} />
-    <Tab.Screen name="StudentChat" component={StudentChatPage} />
-    <Tab.Screen name="StudentWallet" component={StudentWalletPage} />
-    <Tab.Screen name="StudentProfile">
-      {(props) => (
-        <StudentProfilePage
-          {...props}
-          userProfile={{
-            name: 'John Doe',
-            level: 'Intermediate',
-            location: 'Sengkang, SG',
-            totalClasses: 42,
-            email: 'john.doe@email.com',
-            phone: '+65 9123 4567',
-            joinDate: 'Jan 2024',
-            goals: 'Stay fit and learn yoga',
-            favoriteActivities: ['Cricket', 'Yoga'],
-          }}
-          achievements={[
-            { id: 1, icon: '🎯', title: 'Started', date: 'Jan 2024' },
-            { id: 2, icon: '🔥', title: '5-Day Streak', date: 'Feb 2024' },
-          ]}
-          onEdit={() => console.log("Edit tapped")}
-          onSettings={() => props.navigation.navigate("StudentSettings")}
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+
+const StudentTabs = ({ navigation }: { navigation: BottomTabNavigationProp<StudentTabParamList> }) => {
+  const [showBookeeModal, setShowBookeeModal] = React.useState(false);
+
+  interface StudentTabsProps {
+    navigation: {
+      navigate: (tabId: keyof StudentTabParamList, params?: any) => void;
+    };
+  }
+
+  interface Bookee {
+    name: string;
+  }
+
+  const handleTabPress = (tabId: string) => {
+    if (tabId === 'StudentBooking') {
+      setShowBookeeModal(true);
+    } else {
+      navigation.navigate(tabId as keyof StudentTabParamList);
+    }
+  };
+
+  // Pass a ref to the modal's slideAnim
+  const modalRef = useRef<any>(null);
+
+  interface Bookee {
+    name: string;
+  }
+
+  interface SelectBookeeModalRef {
+    animateOut?: (callback: () => void) => void;
+  }
+
+  const handleSelect = (selected: { name?: string; type: "self" | "child" | "new-child" }) => {
+    if (modalRef.current && modalRef.current.animateOut) {
+      modalRef.current.animateOut(() => {
+        setShowBookeeModal(false);
+        navigation.navigate('StudentBooking');
+      });
+    } else {
+      setShowBookeeModal(false);
+      navigation.navigate('StudentBooking');
+    }
+  };
+
+  return (
+    <>
+      <Tab.Navigator
+        screenOptions={{ headerShown: false }}
+        tabBar={({ navigation, state }) => (
+          <>
+            <SelectBookeeModal
+              ref={modalRef}
+              visible={showBookeeModal}
+              userName="Vansh"
+              children={[{ name: "Aanya" }]}
+              onClose={() => setShowBookeeModal(false)}
+              onSelect={handleSelect}
+            />
+            <BottomNavigation
+              activeTab={state.routeNames[state.index]}
+              onTabPress={handleTabPress}
+              tabs={studentTabs}
+            />
+          </>
+        )}
+      >
+        <Tab.Screen name="StudentHome" component={StudentHomePage} />
+        <Tab.Screen name="StudentCalendar" component={StudentCalendarPage} />
+        <Tab.Screen name="StudentBooking" component={StudentBookingPage} />
+        <Tab.Screen name="StudentChat" component={StudentChatPage} />
+        <Tab.Screen name="StudentWallet" component={StudentWalletPage} />
+        <Tab.Screen
+          name="StudentProfile"
+          children={(props) => (
+            <StudentProfilePage
+              {...props}
+              userProfile={{
+                name: "Vansh Puri",
+                email: "vansh@example.com",
+                level: "Beginner",
+                location: "Delhi",
+                totalClasses: 0,
+                phone: "1234567890",
+                profilePicture: "",
+                bio: "",
+              }}
+              achievements={[]}
+              onEdit={() => console.log("Edit profile")}
+              onSettings={() => props.navigation.navigate("StudentSettings")}
+            />
+          )}
         />
-      )}
-    </Tab.Screen>
-  </Tab.Navigator>
-);
+      </Tab.Navigator>
+    </>
+  );
+};
 
 // Coach Bottom Tab Navigator
 const coachTabs = [

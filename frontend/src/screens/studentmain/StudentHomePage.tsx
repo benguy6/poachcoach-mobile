@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,9 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import BottomNavigation from '../../components/BottomNavigation';
+import { BACKEND_URL } from '../../services/api'; 
+import { studentTabs } from '../../constants/studentTabs';
+import { supabase } from '../../services/supabase';
 
 interface Chat {
   id: number;
@@ -28,6 +31,30 @@ interface HomePageProps {
 const HomePage: React.FC<HomePageProps> = ({ navigation }) => {
   const [notifications] = useState(2);
   const [activeTab, setActiveTab] = useState('home');
+  const [firstName, setFirstName] = useState(''); // <-- Add this
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const { data: sessionData, error } = await supabase.auth.getSession();
+        console.log('Session Data:', sessionData); // <-- Add this line
+
+        const accessToken = sessionData.session?.access_token;
+        if (!accessToken) throw new Error('No access token found');
+
+        const response = await fetch(`${BACKEND_URL}/api/user/me`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+
+        const dataJson = await response.json();
+        setFirstName(dataJson.first_name);
+      } catch (error) {
+        console.error('Failed to fetch user info', error);
+      }
+    };
+
+    fetchUser();
+  }, []);
 
   const chats: Chat[] = [
     {
@@ -50,27 +77,7 @@ const HomePage: React.FC<HomePageProps> = ({ navigation }) => {
 
   const handleTabPress = (tabId: string) => {
     setActiveTab(tabId);
-    
-    // Navigate based on tab selection
-    switch (tabId) {
-      case 'home':
-        // Already on home, maybe refresh or scroll to top
-        break;
-      case 'calendar':
-        navigation.navigate('StudentCalendar');
-        break;
-      case 'booking':
-        navigation.navigate('StudentBooking');
-        break;
-      case 'chat':
-        navigation.navigate('StudentChat');
-        break;
-      case 'wallet':
-        navigation.navigate('StudentWallet');
-        break;
-      default:
-        break;
-    }
+    navigation.navigate(tabId);
   };
 
   const handleSettingsPress = () => {
@@ -84,15 +91,6 @@ const HomePage: React.FC<HomePageProps> = ({ navigation }) => {
   const handleProfilePress = () => {
     navigation.navigate('StudentProfile');
   };
-
-  const studentTabs = [
-  { id: 'StudentHome', icon: 'home' as keyof typeof Ionicons.glyphMap, iconOutline: 'home-outline' as keyof typeof Ionicons.glyphMap },
-  { id: 'StudentCalendar', icon: 'calendar' as keyof typeof Ionicons.glyphMap, iconOutline: 'calendar-outline' as keyof typeof Ionicons.glyphMap },
-  { id: 'StudentBooking', icon: 'add' as keyof typeof Ionicons.glyphMap, iconOutline: 'add' as keyof typeof Ionicons.glyphMap, isCenter: true },
-  { id: 'StudentChat', icon: 'chatbubble' as keyof typeof Ionicons.glyphMap, iconOutline: 'chatbubble-outline' as keyof typeof Ionicons.glyphMap },
-  { id: 'StudentWallet', icon: 'wallet' as keyof typeof Ionicons.glyphMap, iconOutline: 'wallet-outline' as keyof typeof Ionicons.glyphMap },
-];
-
 
   return (
     <SafeAreaView style={styles.container}>
@@ -132,7 +130,7 @@ const HomePage: React.FC<HomePageProps> = ({ navigation }) => {
               style={styles.profileImage}
             />
             <View style={styles.profileText}>
-              <Text style={styles.greeting}>Hello, John!</Text>
+              <Text style={styles.greeting}>Hello, {firstName || 'Student'}!</Text>
               <Text style={styles.subGreeting}>Ready for your next session?</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="#fed7aa" />
@@ -232,7 +230,7 @@ const HomePage: React.FC<HomePageProps> = ({ navigation }) => {
 
       <BottomNavigation
         activeTab="StudentHome"
-        onTabPress={tabId => navigation.navigate(tabId)}
+        onTabPress={handleTabPress}
         tabs={studentTabs}
       />
     </SafeAreaView>

@@ -315,25 +315,43 @@ router.get('/me', verifySupabaseToken, async (req, res) => {
   try {
     const userId = req.user.id;
 
-    // Check Coaches table
-    const { data: coach, error: coachError } = await supabase
-      .from('Coaches')
-      .select('*')
+    // Get user profile
+    const { data: user, error: userError } = await supabase
+      .from('Users')
+      .select('first_name, last_name, email, role')
       .eq('id', userId)
       .single();
 
-    if (coach) return res.json({ role: "coach" });
+    if (userError || !user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Check Coaches table
+    const { data: coach } = await supabase
+      .from('Coaches')
+      .select('id')
+      .eq('id', userId)
+      .single();
+
+    if (coach) {
+      console.log("Returning user:", user);
+      return res.json({ ...user, role: "coach" });
+    }
+    if (student) {
+      console.log("Returning user:", user);
+      return res.json({ ...user, role: "student" });
+    }
 
     // Check Students table
-    const { data: student, error: studentError } = await supabase
+    const { data: student } = await supabase
       .from('Students')
-      .select('*')
+      .select('id')
       .eq('id', userId)
       .single();
 
-    if (student) return res.json({ role: "student" });
+    if (student) return res.json({ ...user, role: "student" });
 
-    return res.json({ role: "unknown" });
+    return res.json({ ...user, role: "unknown" });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: "Internal server error" });
