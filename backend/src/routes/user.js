@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs'); 
 const { supabase } = require('../supabaseClient');
 const { verifySupabaseToken } = require('../middleware/authMiddleware');
+const { getGeoFromPostal } = require('../utils/geocode');
 
 const router = express.Router();
 
@@ -120,7 +121,7 @@ router.post('/signup-coach', async (req, res) => {
     gender,
     number,
     postal_code,
-    qualifications, 
+    qualifications,
     sport,
   } = req.body;
 
@@ -138,40 +139,51 @@ router.post('/signup-coach', async (req, res) => {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
-  const { error: userErr } = await supabase.from('Users').insert([
-    {
+  try {
+    const { latitude, longitude } = await getGeoFromPostal(postal_code);
+
+
+    const { error: userErr } = await supabase.from('Users').insert([
+      {
+        id,
+        email,
+        first_name,
+        last_name,
+        age: age.toString(),
+        gender,
+        number,
+        postal_code,
+        latitude: latitude.toString(),
+        longitude: longitude.toString(),
+        role: 'coach',
+      },
+    ]);
+
+    if (userErr) {
+      console.error('Error inserting into Users:', userErr.message);
+      return res.status(500).json({ error: userErr.message });
+    }
+
+    const coachPayload = {
       id,
-      email,
-      first_name,
-      last_name,
-      age: age.toString(),
-      gender,
-      number,
-      postal_code,
-      role: 'coach',
-    },
-  ]);
+      sport,
+      qualifications,
+    };
 
-  if (userErr) {
-    console.error('Error inserting into Users:', userErr.message);
-    return res.status(500).json({ error: userErr.message });
+    const { error: coachErr } = await supabase.from('Coaches').insert([coachPayload]);
+
+    if (coachErr) {
+      console.error('Error inserting into Coaches:', coachErr.message);
+      return res.status(500).json({ error: coachErr.message });
+    }
+
+    return res.status(201).json({ message: 'Coach registered successfully' });
+  } catch (err) {
+    console.error('Geolocation error:', err.message);
+    return res.status(500).json({ error: 'Failed to fetch geolocation from postal code' });
   }
-
-  const coachPayload = {
-    id,
-    sport,
-    qualifications,
-  };
-
-  const { error: coachErr } = await supabase.from('Coaches').insert([coachPayload]);
-
-  if (coachErr) {
-    console.error('Error inserting into Coaches:', coachErr.message);
-    return res.status(500).json({ error: coachErr.message });
-  }
-
-  return res.status(201).json({ message: 'Coach registered successfully' });
 });
+
 
 
 
@@ -192,28 +204,37 @@ router.post('/signup-student', async (req, res) => {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
-  const { error: userErr } = await supabase.from('Users').insert([{
-    id,
-    email,
-    first_name,
-    last_name,
-    age: age.toString(),
-    gender,
-    number,
-    postal_code,
-    role: 'student',
-  }]);
+  try {
+    const { latitude, longitude } = await getGeoFromPostal(postal_code);
 
-  if (userErr) {
-    return res.status(500).json({ error: userErr.message });
+    const { error: userErr } = await supabase.from('Users').insert([{
+      id,
+      email,
+      first_name,
+      last_name,
+      age: age.toString(),
+      gender,
+      number,
+      postal_code,
+      latitude: latitude.toString(),
+      longitude: longitude.toString(),
+      role: 'student',
+    }]);
+
+    if (userErr) {
+      return res.status(500).json({ error: userErr.message });
+    }
+
+    const { error: studentErr } = await supabase.from('Students').insert([{ id }]);
+    if (studentErr) {
+      return res.status(500).json({ error: studentErr.message });
+    }
+
+    return res.status(201).json({ message: 'Student metadata stored successfully' });
+  } catch (err) {
+    console.error('Geolocation failed:', err.message);
+    return res.status(500).json({ error: 'Failed to fetch geolocation from postal code' });
   }
-
-  const { error: studentErr } = await supabase.from('Students').insert([{ id }]);
-  if (studentErr) {
-    return res.status(500).json({ error: studentErr.message });
-  }
-
-  return res.status(201).json({ message: 'Student metadata stored successfully' });
 });
 
 
@@ -243,13 +264,12 @@ router.post('/login', async (req, res) => {
     });
   }
 
-  // ✅ Query Coaches table using user.id === Coaches.id
+
   const { data: coachData, error: coachError } = await supabase
     .from("Coaches")
     .select("id, has_uploaded_qualifications")
     .eq("id", user.id)
-    .maybeSingle(); // Will return null if not a coach
-
+    .maybeSingle(); 
   return res.status(200).json({
     message: 'Login successful',
     session,
