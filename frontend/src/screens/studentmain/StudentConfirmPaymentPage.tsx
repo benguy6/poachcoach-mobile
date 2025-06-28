@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView } from 'react-native';
 import { X } from 'lucide-react-native';
 
-const ConfirmPaymentScreen: React.FC<any> = ({ route, navigation }) => {
+const StudentConfirmPaymentPage: React.FC<any> = ({ route, navigation }) => {
   const {
     coachName,
     sessionType,
@@ -195,4 +195,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default ConfirmPaymentScreen;
+export default StudentConfirmPaymentPage;

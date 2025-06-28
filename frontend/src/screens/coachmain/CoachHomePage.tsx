@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getCoachDashboard } from '../../services/api';
-import { getToken } from '../../services/auth';
+import { supabase } from '../../services/supabase';
 
 import type { StackNavigationProp } from '@react-navigation/stack';
 
@@ -21,27 +21,28 @@ type CoachHomePageProps = {
 
 const CoachHomePage = ({ navigation }: CoachHomePageProps) => {
   const [notifications] = useState(2);
-  const [coach, setCoach] = useState(null);
-  const [sessions, setSessions] = useState([]);
+  const [coach, setCoach] = useState<any>(null);
+  const [sessions, setSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-  const fetchDashboard = async () => {
-    setLoading(true);
-    const token = await getToken();
-    if (!token) {
-      console.warn('No token found');
-      setLoading(false);
-      return;
-    }
-    const data = await getCoachDashboard(token);
-    setCoach(data.coach);
-    setSessions(data.confirmedSessions);
-    setLoading(false);
-  };
-  fetchDashboard();
-}, []);
-
+    const fetchDashboard = async () => {
+      setLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) return;
+      try {
+        const data = await getCoachDashboard(token);
+        setCoach(data.coach);
+        setSessions(data.confirmedSessions);
+      } catch (err) {
+        console.error('Failed to fetch coach dashboard:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDashboard();
+  }, []);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -66,46 +67,53 @@ const CoachHomePage = ({ navigation }: CoachHomePageProps) => {
         {/* Greeting */}
         <View style={styles.greetingContainer}>
           <Image
-            source={{ uri: 'https://randomuser.me/api/portraits/men/32.jpg' }}
+            source={{ uri: coach?.profilePicture || 'https://randomuser.me/api/portraits/men/32.jpg' }}
             style={styles.profileImage}
           />
           <View style={styles.greetingTextContainer}>
-            <Text style={styles.greetingText}>Hello, Coach!</Text>
+            <Text style={styles.greetingText}>Hello, {coach?.name || 'Coach'}!</Text>
             <Text style={styles.subGreetingText}>Ready to inspire your students?</Text>
           </View>
         </View>
 
-        {/* Upcoming Class */}
+        {/* Upcoming Classes */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Today's Classes</Text>
-
-          <View style={styles.confirmBanner}>
-            <Ionicons name="checkmark-circle" size={20} color="#22c55e" />
-            <Text style={styles.confirmText}>Next Class Starting Soon</Text>
-          </View>
-
-          <Text style={styles.className}>Yoga Basics</Text>
-          <Text style={styles.classSub}>15 students enrolled</Text>
-          <View style={styles.infoRow}>
-            <Ionicons name="time-outline" size={16} color="#9ca3af" />
-            <Text style={styles.infoText}>10:00 AM - 11:00 AM</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Ionicons name="location-outline" size={16} color="#9ca3af" />
-            <Text style={styles.infoText}>Wellness Studio</Text>
-          </View>
-
-          <View style={styles.buttonRow}>
-            <TouchableOpacity style={styles.orangeBtn}>
-              <Text style={styles.btnText}>Start Class</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.redBtn}>
-              <Text style={styles.btnText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
+          <Text style={styles.cardTitle}>Upcoming Classes</Text>
+          {loading ? (
+            <Text style={{ color: '#fff' }}>Loading...</Text>
+          ) : !sessions || sessions.length === 0 ? (
+            <Text style={{ color: '#fff' }}>No confirmed sessions.</Text>
+          ) : (
+            sessions.map((session, idx) => (
+              <View key={session.id || idx} style={{ marginBottom: 20 }}>
+                <View style={styles.confirmBanner}>
+                  <Ionicons name="checkmark-circle" size={20} color="#22c55e" />
+                  <Text style={styles.confirmText}>Class Confirmed</Text>
+                </View>
+                <Text style={styles.className}>{session.class_type || 'Session'}</Text>
+                <Text style={styles.classSub}>{session.students_attending || 0} students enrolled</Text>
+                <View style={styles.infoRow}>
+                  <Ionicons name="time-outline" size={16} color="#9ca3af" />
+                  <Text style={styles.infoText}>{session.start_time} - {session.end_time}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Ionicons name="location-outline" size={16} color="#9ca3af" />
+                  <Text style={styles.infoText}>{session.location_name || 'N/A'}</Text>
+                </View>
+                <View style={styles.buttonRow}>
+                  <TouchableOpacity style={styles.orangeBtn}>
+                    <Text style={styles.btnText}>Start Class</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.redBtn}>
+                    <Text style={styles.btnText}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
+          )}
         </View>
 
-        {/* Recent Messages */}
+        {/* Recent Messages (dummy for now) */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Recent Messages</Text>
@@ -239,4 +247,3 @@ const styles = StyleSheet.create({
 });
 
 export default CoachHomePage;
-

@@ -11,7 +11,7 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import * as SecureStore from "expo-secure-store";
 import axios from "axios";
-import { login, BACKEND_URL } from "../../services/api";
+import { login, BACKEND_URL, getUserRole } from "../../services/api";
 import { supabase } from "../../services/supabase";
 
 export default function LoginScreen() {
@@ -21,90 +21,97 @@ export default function LoginScreen() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = async () => {
-    if (!email || !password) {
-      setError("Email and password are required.");
+const handleLogin = async () => {
+  if (!email || !password) {
+    setError("Email and password are required.");
+    return;
+  }
+
+  setIsLoading(true);
+  setError("");
+
+  try {
+    // Step 1: Authenticate via Supabase
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error || !data.session) {
+      throw new Error(error?.message || "Invalid login credentials.");
+    }
+
+    const { session, user } = data;
+
+    if (!user.email_confirmed_at) {
+      Alert.alert("Email Not Verified", "Please verify your email before logging in.");
+      setIsLoading(false);
       return;
     }
 
-    setIsLoading(true);
-    setError("");
+    // Step 2: Store session
+    await SecureStore.setItemAsync("accessToken", session.access_token ?? "");
+    await SecureStore.setItemAsync("userId", user.id ?? "");
+    await SecureStore.setItemAsync("userEmail", user.email ?? "");
 
+    // Step 3: Set Supabase session
+    await supabase.auth.setSession({
+      access_token: session.access_token,
+      refresh_token: session.refresh_token,
+    });
+
+    // Step 4: Get user role from backend
+    console.log('Login - Getting user role with token:', session.access_token ? 'present' : 'missing');
+    let role: string;
     try {
-      // Step 1: Authenticate user via backend
-      const result = await login(email, password);
-      const session = result.session;
-      const user = session?.user;
-
-      if (!user?.email_confirmed_at) {
-        Alert.alert("Email Not Verified", "Please verify your email before logging in.");
-        setIsLoading(false);
-        return;
-      }
-
-      const accessToken = session.access_token;
-
-      // Step 2: Store session data
-      await SecureStore.setItemAsync("accessToken", accessToken);
-      await SecureStore.setItemAsync("userId", user.id);
-      await SecureStore.setItemAsync("userEmail", user.email);
-
-      // ✅ Step 3: Get role from backend
-      const roleResponse = await axios.get(`${BACKEND_URL}/api/user/me`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-
-      // Type assertion to tell TypeScript the expected shape
-      const { role } = roleResponse.data as { role: string };
+      const roleData = await getUserRole(session.access_token);
+      role = roleData.role;
+      console.log('Login - User role received:', role);
       await SecureStore.setItemAsync("userRole", role);
-
-      // Set supabase session
-      await supabase.auth.setSession({
-        access_token: session.access_token,
-        refresh_token: session.refresh_token,
-      });
-
-      // ✅ Step 4: Navigate based on role
-      if (role === "student") {
-        navigation.reset({
-          index: 0,
-          routes: [
-            {
-              name: "MainApp",
-              params: {
-                screen: "StudentTabs",
-                params: { screen: "StudentHome" },
-              },
-            },
-          ],
-        });
-      } else if (role === "coach") {
-        navigation.reset({
-          index: 0,
-          routes: [
-            {
-              name: "CoachMainApp",
-              params: {
-                screen: "CoachTabs",
-                params: { screen: "CoachHome" },
-              },
-            },
-          ],
-        });
-      } else {
-        Alert.alert("Login Error", "Unknown user role. Please contact support.");
-        await SecureStore.deleteItemAsync("accessToken");
-        await SecureStore.deleteItemAsync("userId");
-        await SecureStore.deleteItemAsync("userEmail");
-      }
-
-    } catch (err: any) {
-      console.error("Login error:", err.message);
-      setError(err.message || "Login failed. Please check your credentials.");
-    } finally {
-      setIsLoading(false);
+    } catch (roleError: any) {
+      console.error('Login - Failed to get user role:', roleError);
+      throw new Error(`Failed to get user role: ${roleError.message}`);
     }
-  };
+
+    // Step 5: Navigate based on role
+    if (role === "student") {
+      navigation.reset({
+        index: 0,
+        routes: [
+          {
+            name: "MainApp",
+            params: {
+              screen: "StudentTabs",
+              params: { screen: "StudentHome" },
+            },
+          },
+        ],
+      });
+    } else if (role === "coach") {
+      navigation.reset({
+        index: 0,
+        routes: [
+          {
+            name: "CoachMainApp",
+            params: {
+              screen: "CoachTabs",
+              params: { screen: "CoachHome" },
+            },
+          },
+        ],
+      });
+    } else {
+      Alert.alert("Login Error", "Unknown user role.");
+    }
+
+  } catch (err: any) {
+    console.error("Login error:", err.message);
+    setError(err.message || "Login failed. Please check your credentials.");
+  } finally {
+    setIsLoading(false);
+  }
+};
+
 
   return (
     <View style={styles.container}>

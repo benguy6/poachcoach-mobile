@@ -11,10 +11,15 @@ import {
   Platform,
   KeyboardAvoidingView,
   SafeAreaView,
+  Alert,
 } from 'react-native';
 import MultiSlider from '@ptomasroos/react-native-multi-slider';
 import { CalendarList } from 'react-native-calendars';
 import * as Location from 'expo-location';
+import { createCoachSession } from '../../services/api';
+import { supabase } from '../../services/supabase';
+import { useNavigation } from '@react-navigation/native';
+import * as SecureStore from 'expo-secure-store';
 
 import {
   ChevronLeft,
@@ -77,6 +82,7 @@ const monthNames = [
 ];
 
 const CoachCreateSessionPage = () => {
+  const navigation = useNavigation();
   const [currentStep, setCurrentStep] = useState(1);
   
   interface SessionData {
@@ -120,7 +126,8 @@ const CoachCreateSessionPage = () => {
   const [showInlineCalendar, setShowInlineCalendar] = useState(false);
   const [clashError, setClashError] = useState<string | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(new Date(currentYear, currentMonth, 1));
-  const [recurringType, setRecurringType] = useState<'weekly' | 'monthly'>('weekly');
+  const [recurringType, setRecurringType] = useState<string>('weekly');
+  const [repeatCount, setRepeatCount] = useState<string>('');
 
   useEffect(() => {
     (async () => {
@@ -143,7 +150,7 @@ const CoachCreateSessionPage = () => {
 
   const toggleDay = (day: string) => {
     setSessionData((prev: SessionData) => {
-      const days = [...prev.recurringDays];
+      const days = [...(prev.recurringDays || [])];
       const index = days.indexOf(day);
       if (index > -1) days.splice(index, 1);
       else days.push(day);
@@ -159,7 +166,7 @@ const CoachCreateSessionPage = () => {
   const toggleDate = (day: string | ToggleDateDay) => {
     const dateStr = typeof day === 'string' ? day : day.dateString;
     setSessionData((prev: SessionData) => {
-      const dates = [...prev.monthlyDates];
+      const dates = [...(prev.monthlyDates || [])];
       const index = dates.indexOf(dateStr);
       if (index > -1) dates.splice(index, 1);
       else dates.push(dateStr);
@@ -168,22 +175,45 @@ const CoachCreateSessionPage = () => {
   };
 
   const handleNext = () => {
-    if (currentStep < 5) setCurrentStep(currentStep + 1);
+    if (currentStep < 4) setCurrentStep(currentStep + 1);
   };
 
   const handlePrevious = () => {
     if (currentStep > 1) setCurrentStep(currentStep - 1);
   };
 
-  const handleSubmit = () => {
-    console.log('Creating session:', sessionData);
-    // Reset form
-    setCurrentStep(1);
-    setSessionData({
-      sport: '', minAge: 6, maxAge: 18, startTime: '', endTime: '',
-      recurringDays: [], monthlyDates: [], location: '', groupType: '',
-      maxStudents: '', price: '', description: '', sessionType: ''
-    });
+  const handleSubmit = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('No access token');
+      const coach_id = await SecureStore.getItemAsync('userId');
+      const payload = {
+        sport: sessionData.sport,
+        session_type: sessionData.sessionType,
+        start_time: sessionData.startTime,
+        end_time: sessionData.endTime,
+        recurring_type: sessionData.sessionType === 'recurring' ? recurringType : undefined,
+        recurring_days: sessionData.sessionType === 'recurring' && recurringType === 'weekly' ? sessionData.recurringDays : undefined,
+        recurring_dates: sessionData.sessionType === 'recurring' && recurringType === 'monthly' ? sessionData.monthlyDates : undefined,
+        repeat_count: sessionData.sessionType === 'recurring' ? repeatCount : undefined,
+        price_per_session: sessionData.price,
+        description: sessionData.description,
+        age_range_start: sessionData.minAge,
+        age_range_end: sessionData.maxAge,
+        max_students: sessionData.groupType === 'group' ? sessionData.maxStudents : '1',
+        postal_code: sessionData.location,
+        location_name: sessionData.location,
+        class_type: sessionData.groupType,
+        coach_id,
+      };
+      await createCoachSession(token, payload);
+      Alert.alert('Success', 'Session Successfully booked', [
+        { text: 'OK', onPress: () => navigation.reset({ index: 0, routes: [{ name: 'CoachMainApp' }] } as any) }
+      ]);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to create session');
+    }
   };
 
   // Helper to get days in month and first day
@@ -202,7 +232,7 @@ const CoachCreateSessionPage = () => {
     }
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = `${calendarMonth.getFullYear()}-${String(calendarMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      const isSelected = sessionData.monthlyDates.includes(dateStr);
+      const isSelected = (sessionData.monthlyDates && sessionData.monthlyDates.includes(dateStr));
       days.push(
         <TouchableOpacity
           key={day}
@@ -315,78 +345,79 @@ const CoachCreateSessionPage = () => {
     </View>
   );
 
-  // Step 2: Time & Age Range
-  
-
-  // Step 3: Schedule
-  const renderStep3 = () => {
-    const sessionsThisMonth = getSessionsForMonth(calendarMonth.getMonth(), calendarMonth.getFullYear());
-
+  // Step 2: Schedule
+  const renderStep2 = () => {
     return (
       <View style={styles.stepContainer}>
         <Text style={styles.stepTitle}>Schedule</Text>
 
-        {/* Session Type */}
-        <Text style={styles.label}>Session type</Text>
-        <View style={styles.row}>
-          <TouchableOpacity
-            style={[
-              styles.typeButton,
-              sessionData.sessionType === 'single' && styles.typeButtonActive
-            ]}
-            onPress={() => setSessionData({ ...sessionData, sessionType: 'single', recurringDays: [], monthlyDates: [] })}
-          >
-            <Text style={sessionData.sessionType === 'single' ? styles.typeButtonTextActive : styles.typeButtonText}>
-              Single Class
-            </Text>
+        {/* Start Time */}
+        <Text style={styles.label}>Start Time</Text>
+        <TouchableOpacity
+          style={styles.dropdownButton}
+          onPress={() => setShowStartDropdown(true)}
+        >
+          <Text style={sessionData.startTime ? styles.dropdownText : styles.dropdownPlaceholder}>
+            {sessionData.startTime || 'Select start time'}
+          </Text>
+          <ChevronDown size={20} color="#9ca3af" />
+        </TouchableOpacity>
+        <Modal visible={showStartDropdown} transparent animationType="fade">
+          <TouchableOpacity style={styles.modalOverlay} onPress={() => setShowStartDropdown(false)}>
+            <View style={styles.dropdownModal}>
+              <ScrollView>
+                {timeSlots.map((time) => (
+                  <TouchableOpacity
+                    key={time}
+                    style={styles.dropdownOption}
+                    onPress={() => {
+                      setSessionData({ ...sessionData, startTime: time });
+                      setShowStartDropdown(false);
+                    }}
+                  >
+                    <Text style={styles.dropdownText}>{time}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.typeButton,
-              sessionData.sessionType === 'recurring' && styles.typeButtonActive
-            ]}
-            onPress={() => setSessionData({ ...sessionData, sessionType: 'recurring', monthlyDates: [] })}
-          >
-            <Text style={sessionData.sessionType === 'recurring' ? styles.typeButtonTextActive : styles.typeButtonText}>
-              Recurring Class
-            </Text>
-          </TouchableOpacity>
-        </View>
+        </Modal>
 
-        {/* Single Class: Start Time & Date */}
+        {/* End Time */}
+        <Text style={styles.label}>End Time</Text>
+        <TouchableOpacity
+          style={styles.dropdownButton}
+          onPress={() => setShowEndDropdown(true)}
+        >
+          <Text style={sessionData.endTime ? styles.dropdownText : styles.dropdownPlaceholder}>
+            {sessionData.endTime || 'Select end time'}
+          </Text>
+          <ChevronDown size={20} color="#9ca3af" />
+        </TouchableOpacity>
+        <Modal visible={showEndDropdown} transparent animationType="fade">
+          <TouchableOpacity style={styles.modalOverlay} onPress={() => setShowEndDropdown(false)}>
+            <View style={styles.dropdownModal}>
+              <ScrollView>
+                {timeSlots.map((time) => (
+                  <TouchableOpacity
+                    key={time}
+                    style={styles.dropdownOption}
+                    onPress={() => {
+                      setSessionData({ ...sessionData, endTime: time });
+                      setShowEndDropdown(false);
+                    }}
+                  >
+                    <Text style={styles.dropdownText}>{time}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+
+        {/* Single Class: Date Selection */}
         {sessionData.sessionType === 'single' && (
           <>
-            <Text style={styles.label}>Start Time</Text>
-            <TouchableOpacity
-              style={styles.dropdownButton}
-              onPress={() => setShowStartDropdown(true)}
-            >
-              <Text style={sessionData.startTime ? styles.dropdownText : styles.dropdownPlaceholder}>
-                {sessionData.startTime || 'Select start time'}
-              </Text>
-              <ChevronDown size={20} color="#9ca3af" />
-            </TouchableOpacity>
-            <Modal visible={showStartDropdown} transparent animationType="fade">
-              <TouchableOpacity style={styles.modalOverlay} onPress={() => setShowStartDropdown(false)}>
-                <View style={styles.dropdownModal}>
-                  <ScrollView>
-                    {timeSlots.map((time) => (
-                      <TouchableOpacity
-                        key={time}
-                        style={styles.dropdownOption}
-                        onPress={() => {
-                          setSessionData({ ...sessionData, startTime: time });
-                          setShowStartDropdown(false);
-                        }}
-                      >
-                        <Text style={styles.dropdownText}>{time}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              </TouchableOpacity>
-            </Modal>
-
             <Text style={styles.label}>Pick Date</Text>
             <View style={styles.calendarCard}>
               <View style={styles.monthNav}>
@@ -442,12 +473,6 @@ const CoachCreateSessionPage = () => {
                 })()}
               </View>
             </View>
-            {/* Summary */}
-            <Text style={{ color: '#fff', marginTop: 12 }}>
-              {sessionData.startTime && sessionData.monthlyDates.length === 1
-                ? `You have scheduled a single class on ${sessionData.monthlyDates[0]} at ${sessionData.startTime}.`
-                : 'Please select a time and date.'}
-            </Text>
           </>
         )}
 
@@ -480,6 +505,17 @@ const CoachCreateSessionPage = () => {
               </TouchableOpacity>
             </View>
 
+            {/* Repeat Count */}
+            <Text style={styles.label}>Number of sessions</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="e.g., 8"
+              placeholderTextColor="#9ca3af"
+              keyboardType="numeric"
+              value={repeatCount}
+              onChangeText={setRepeatCount}
+            />
+
             {/* Weekly: Recurring Days */}
             {recurringType === 'weekly' && (
               <>
@@ -500,12 +536,6 @@ const CoachCreateSessionPage = () => {
                     </TouchableOpacity>
                   ))}
                 </View>
-                {/* Summary */}
-                <Text style={{ color: '#fff', marginTop: 12 }}>
-                  {sessionData.recurringDays.length > 0
-                    ? `You have scheduled a recurring class every ${sessionData.recurringDays.join(', ')}.`
-                    : 'Please select at least one day.'}
-                </Text>
               </>
             )}
 
@@ -538,12 +568,6 @@ const CoachCreateSessionPage = () => {
                   </View>
                   <View style={styles.calendarGrid}>{renderStaticCalendar()}</View>
                 </View>
-                {/* Summary */}
-                <Text style={{ color: '#fff', marginTop: 12 }}>
-                  {sessionData.monthlyDates.length > 0
-                    ? `You have scheduled recurring classes on: ${sessionData.monthlyDates.join(', ')}.`
-                    : 'Please select at least one date.'}
-                </Text>
               </>
             )}
           </>
@@ -552,42 +576,21 @@ const CoachCreateSessionPage = () => {
     );
   };
 
-  // Step 4: Location & Group Type
-  const renderStep4 = () => (
+  // Step 3: Location & Group Type
+  const renderStep3 = () => (
     <View style={styles.stepContainer}>
       <Text style={styles.stepTitle}>Location & Group Type</Text>
 
-      {/* Location */}
-      <Text style={styles.label}>Location</Text>
-      <TouchableOpacity
-        style={styles.dropdownButton}
-        onPress={() => setShowLocationModal(true)}
-      >
-        <Text style={sessionData.location ? styles.dropdownText : styles.dropdownPlaceholder}>
-          {sessionData.location || 'Select location'}
-        </Text>
-        <Map size={20} color="#9ca3af" />
-      </TouchableOpacity>
-      <Modal visible={showLocationModal} transparent animationType="fade">
-        <TouchableOpacity style={styles.modalOverlay} onPress={() => setShowLocationModal(false)}>
-          <View style={styles.dropdownModal}>
-            <ScrollView>
-              {locations.map(location => (
-                <TouchableOpacity
-                  key={location}
-                  style={styles.dropdownOption}
-                  onPress={() => {
-                    setSessionData({ ...sessionData, location });
-                    setShowLocationModal(false);
-                  }}
-                >
-                  <Text style={styles.dropdownText}>{location}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+      {/* Postal Code */}
+      <Text style={styles.label}>Postal Code</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Enter postal code"
+        placeholderTextColor="#9ca3af"
+        value={sessionData.location}
+        onChangeText={(val) => setSessionData({ ...sessionData, location: val })}
+        keyboardType="numeric"
+      />
 
       {/* Group Type */}
       <Text style={styles.label}>Session format</Text>
@@ -654,8 +657,8 @@ const CoachCreateSessionPage = () => {
     </View>
   );
 
-  // Step 5: Pricing & Details
-  const renderStep5 = () => (
+  // Step 4: Pricing & Details
+  const renderStep4 = () => (
     <View style={styles.stepContainer}>
       <Text style={styles.stepTitle}>Pricing & Details</Text>
 
@@ -680,12 +683,6 @@ const CoachCreateSessionPage = () => {
         value={sessionData.description}
         onChangeText={val => setSessionData({ ...sessionData, description: val })}
       />
-
-      {/* Auto-detected Location */}
-      <Text style={styles.label}>Auto-detected Postal Code</Text>
-      <View style={styles.locationDisplay}>
-        <Text style={styles.locationText}>{sessionData.location || 'Fetching location...'}</Text>
-      </View>
 
       {/* Summary */}
       <View style={styles.summaryCard}>
@@ -715,19 +712,43 @@ const CoachCreateSessionPage = () => {
   );
 
   const canProceed = () => {
-    if (currentStep !== 3) return true;
-    if (sessionData.sessionType === 'single') {
-      return !!(sessionData.startTime && sessionData.monthlyDates.length === 1);
-    }
-    if (sessionData.sessionType === 'recurring') {
-      if (recurringType === 'weekly') {
-        return sessionData.recurringDays.length > 0;
+    let canProceedResult = false;
+    
+    if (currentStep === 1) {
+      canProceedResult = !!(sessionData.sport && sessionData.sessionType);
+    } else if (currentStep === 2) {
+      if (!sessionData.startTime || !sessionData.endTime) {
+        canProceedResult = false;
+      } else if (sessionData.sessionType === 'single') {
+        canProceedResult = (sessionData.monthlyDates && sessionData.monthlyDates.length === 1);
+      } else if (sessionData.sessionType === 'recurring') {
+        if (!repeatCount || repeatCount === '') {
+          canProceedResult = false;
+        } else if (recurringType === 'weekly') {
+          canProceedResult = (sessionData.recurringDays && sessionData.recurringDays.length > 0);
+        } else if (recurringType === 'monthly') {
+          canProceedResult = (sessionData.monthlyDates && sessionData.monthlyDates.length > 0);
+        }
       }
-      if (recurringType === 'monthly') {
-        return sessionData.monthlyDates.length > 0;
-      }
+    } else if (currentStep === 3) {
+      canProceedResult = !!(sessionData.location && sessionData.location.trim() !== '' && sessionData.groupType);
+    } else {
+      canProceedResult = true;
     }
-    return false;
+    
+    console.log(`Step ${currentStep} canProceed:`, canProceedResult, {
+      sport: sessionData.sport,
+      sessionType: sessionData.sessionType,
+      startTime: sessionData.startTime,
+      endTime: sessionData.endTime,
+      monthlyDates: sessionData.monthlyDates,
+      repeatCount,
+      recurringDays: sessionData.recurringDays,
+      location: sessionData.location,
+      groupType: sessionData.groupType
+    });
+    
+    return canProceedResult;
   };
 
   return (
@@ -748,7 +769,7 @@ const CoachCreateSessionPage = () => {
 
         {/* Progress Indicator */}
         <View style={styles.progressRow}>
-          {[1, 2, 3, 4, 5].map((step) => (
+          {[1, 2, 3, 4].map((step) => (
             <React.Fragment key={step}>
               <View
                 style={[
@@ -760,7 +781,7 @@ const CoachCreateSessionPage = () => {
                   {step}
                 </Text>
               </View>
-              {step < 5 && (
+              {step < 4 && (
                 <View
                   style={[
                     styles.progressBar,
@@ -779,9 +800,9 @@ const CoachCreateSessionPage = () => {
           keyboardShouldPersistTaps="handled"
         >
           {currentStep === 1 && renderStep1()}
+          {currentStep === 2 && renderStep2()}
           {currentStep === 3 && renderStep3()}
           {currentStep === 4 && renderStep4()}
-          {currentStep === 5 && renderStep5()}
         </ScrollView>
 
         {/* Navigation Buttons */}
@@ -798,12 +819,13 @@ const CoachCreateSessionPage = () => {
             style={[
               styles.navBtn,
               styles.navBtnOrange,
-              currentStep === 3 && clashError ? { opacity: 0.5 } : {}
+              !canProceed() && { opacity: 0.5 }
             ]}
-            onPress={currentStep === 5 ? handleSubmit : handleNext}
-            disabled={currentStep === 3 && !!clashError}
+            onPress={currentStep === 4 ? handleSubmit : handleNext}
+            disabled={!canProceed()}
+            activeOpacity={0.8}
           >
-            <Text style={styles.navBtnText}>{currentStep === 5 ? 'Create Session' : 'Next'}</Text>
+            <Text style={styles.navBtnText}>{currentStep === 4 ? 'Create Session' : 'Next'}</Text>
           </TouchableOpacity>
         </View>
 
@@ -1019,29 +1041,62 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 12,
   },
-  calendarModal: {
-    flex: 1,
-    backgroundColor: '#18181b',
-  },
-  calendarDoneButton: {
-    backgroundColor: '#fb923c',
+  calendarCard: {
+    backgroundColor: '#27272a',
+    borderRadius: 12,
     padding: 16,
-    margin: 20,
+    marginVertical: 16,
+  },
+  monthNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  monthNavBtn: {
+    padding: 8,
+    borderRadius: 8,
+  },
+  monthLabel: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  daysOfWeekRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  dayOfWeekText: {
+    color: '#9ca3af',
+    fontSize: 12,
+    fontWeight: '600',
+    width: (width - 64) / 7,
+    textAlign: 'center',
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
+  },
+  calendarEmptyCell: {
+    width: (width - 64) / 7,
+    height: 40,
+  },
+  calendarDay: {
+    width: (width - 64) / 7,
+    height: 40,
     borderRadius: 8,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
   },
-  locationDisplay: {
-    backgroundColor: '#27272a',
-    borderColor: '#374151',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 8,
+  calendarDaySelected: {
+    backgroundColor: '#fb923c',
   },
-  locationText: {
-    color: '#fff',
-    fontSize: 15,
+  calendarDayText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   summaryCard: {
     backgroundColor: '#27272a',
@@ -1081,7 +1136,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    },
+  },
   progressCircleActive: {
     backgroundColor: '#fb923c',
   },
@@ -1117,115 +1172,36 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#374151',
     gap: 12,
+    minHeight: 80,
   },
-    navBtn: {
-      flex: 1,
-      paddingVertical: 14,
-      borderRadius: 8,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    navBtnText: {
-      fontSize: 16,
-      fontWeight: 'bold',
-      color: '#fff',
-    },
-    navBtnOrange: {
-      backgroundColor: '#fb923c',
-    },
-    navBtnGray: {
-      backgroundColor: '#374151',
-    },
-    bottomNav: {
-      justifyContent: 'space-around',
-      borderTopColor: '#374151',
-      borderTopWidth: 1,
-      paddingHorizontal: 20,
-      paddingVertical: 12,
-      backgroundColor: '#27272a',
-      flexDirection: 'row',
-    },
-    noClassText: {
-      marginBottom: 12,
-      fontSize: 13,
-      color: '#9ca3af',
-    },
-    staticCalendarContainer: {
-      backgroundColor: '#27272a',
-      borderRadius: 10,
-      padding: 16,
-      marginTop: 12,
-    },
-    staticCalendarHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 12,
-    },
-    calendarArrow: {
-      padding: 8,
-    },
-    calendarMonthText: {
-      color: '#fff',
-      fontSize: 16,
-      fontWeight: 'bold',
-    },
-    calendarCard: {
-      backgroundColor: '#27272a',
-      borderRadius: 12,
-      padding: 16,
-      marginVertical: 16,
-    },
-    monthNav: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 12,
-    },
-    monthNavBtn: {
-      padding: 8,
-      borderRadius: 8,
-    },
-    monthLabel: {
-      color: '#fff',
-      fontSize: 16,
-      fontWeight: 'bold',
-    },
-    daysOfWeekRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      marginBottom: 4,
-    },
-    dayOfWeekText: {
-      color: '#9ca3af',
-      fontSize: 12,
-      fontWeight: '600',
-      width: (width - 64) / 7,
-      textAlign: 'center',
-    },
-    calendarGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      justifyContent: 'flex-start',
-    },
-    calendarEmptyCell: {
-      width: (width - 64) / 7,
-      height: 40,
-    },
-    calendarDay: {
-      width: (width - 64) / 7,
-      height: 40,
-      borderRadius: 8,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: 4,
-    },
-    calendarDaySelected: {
-      backgroundColor: '#fb923c',
-    },
-    calendarDayText: {
-      fontSize: 14,
-      fontWeight: '600',
-    },
-  });
-  export default CoachCreateSessionPage;
+  navBtn: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: 48,
+  },
+  navBtnText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  navBtnOrange: {
+    backgroundColor: '#fb923c',
+  },
+  navBtnGray: {
+    backgroundColor: '#374151',
+  },
+  bottomNav: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: '#27272a',
+    borderTopWidth: 1,
+    borderTopColor: '#374151',
+  },
+});
+
+export default CoachCreateSessionPage;

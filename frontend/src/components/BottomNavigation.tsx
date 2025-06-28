@@ -6,6 +6,8 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import type { StudentTabParamList } from '../App'; 
+
 
 export type TabItem = {
   id: string;
@@ -16,7 +18,7 @@ export type TabItem = {
 
 export interface BottomNavigationProps {
   activeTab: string;
-  onTabPress: (tabId: string) => void;
+  onTabPress: (tabId: keyof StudentTabParamList) => void;
   tabs: TabItem[];
 }
 

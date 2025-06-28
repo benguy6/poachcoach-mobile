@@ -20,7 +20,7 @@ router.get('/', verifySupabaseToken, async (req, res) => {
     const { data: coach, error: coachError } = await supabase
       .from('Coaches')
       .select('*')
-      .eq('user_id', coachId)
+      .eq('id', coachId)
       .single();
 
     if (coachError || !coach) {
@@ -74,7 +74,7 @@ router.post('/cancel-session', verifySupabaseToken, async (req, res) => {
       const { data: coach, error: coachError } = await supabase
         .from('Coaches')
         .select('id')
-        .eq('user_id', userId)
+        .eq('id', userId)
         .single();
   
       if (coachError || !coach || coach.id !== session.coach_id) {

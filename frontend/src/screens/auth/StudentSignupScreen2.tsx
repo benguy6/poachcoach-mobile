@@ -38,25 +38,27 @@ export default function StudentSignupScreen2() {
   ]);
 
   const handleSubmit = async () => {
-    if (!acceptedTerms) {
-      Alert.alert("Please accept the terms to continue.");
-      return;
+  if (!acceptedTerms) {
+    Alert.alert("Please accept the terms to continue.");
+    return;
+  }
+
+  try {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+    });
+
+    if (error) {
+      throw new Error(error.message);
     }
 
-    try {
-      const { user, error } = await supabase.auth.signUp({
-        email,
-        password,
-      });
+    const userId = data?.user?.id;
 
-      if (error || !user) {
-        console.error("Supabase signup error:", error);
-        Alert.alert("Signup Failed", error?.message || "Could not sign up.");
-        return;
-      }
-
+    // Register metadata only if user exists
+    if (userId) {
       await registerStudent({
-        id: user.id,
+        id: userId,
         email,
         first_name: first_Name,
         last_name: last_Name,
@@ -65,22 +67,25 @@ export default function StudentSignupScreen2() {
         number,
         postal_code,
       });
-
-      Alert.alert("Success!", "Verification email sent. Please check your inbox.", [
-        {
-          text: "OK",
-          onPress: () =>
-            navigation.reset({
-              index: 0,
-              routes: [{ name: "Login" }],
-            }),
-        },
-      ]);
-    } catch (err: any) {
-      console.error(" Unexpected error:", err);
-      Alert.alert("Signup Failed", err.message || "Unknown error occurred.");
     }
-  };
+
+    // ✅ Always show success alert and navigate to Login
+    Alert.alert("Success!", "Verify your email now!", [
+      {
+        text: "OK",
+        onPress: () =>
+          navigation.reset({
+            index: 0,
+            routes: [{ name: "Login" }],
+          }),
+      },
+    ]);
+  } catch (err: any) {
+    console.error("Signup error:", err);
+    Alert.alert("Signup Failed", err.message || "Unknown error");
+  }
+};
+
 
   const isSubmitDisabled =
     !first_Name.trim() ||

@@ -38,6 +38,8 @@ type UserProfile = {
   joinDate: string;
   goals: string;
   favoriteActivities: string[];
+  profilePicture?: string;
+  bio?: string;
 };
 
 type ProfilePageProps = {
@@ -47,7 +49,7 @@ type ProfilePageProps = {
   onSettings: () => void;
 };
 
-const ProfilePage: React.FC<ProfilePageProps> = ({
+const StudentProfilePage: React.FC<ProfilePageProps> = ({
   userProfile,
   achievements,
   onEdit,
@@ -331,4 +333,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default ProfilePage;
+export default StudentProfilePage;

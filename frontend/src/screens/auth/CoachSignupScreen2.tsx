@@ -50,21 +50,23 @@ export default function CoachSignupScreen2() {
     { label: "Tennis", value: "Tennis" },
   ]);
 
-  const handleSubmit = async () => {
-    if (!acceptedTerms) {
-      Alert.alert("Please accept the terms to continue.");
-      return;
+const handleSubmit = async () => {
+  if (!acceptedTerms) {
+    Alert.alert("Please accept the terms to continue.");
+    return;
+  }
+
+  try {
+    const { data, error } = await supabase.auth.signUp({ email, password });
+
+    if (error) {
+      throw new Error(error.message);
     }
 
-    try {
-      const { user, error } = await supabase.auth.signUp({ email, password });
+    const userId = data?.user?.id;
 
-      if (error || !user) {
-        throw new Error(error?.message || "Auth failed");
-      }
-
-      const userId = user.id;
-
+    // Register coach metadata if userId exists
+    if (userId) {
       await registerCoach({
         id: userId,
         email,
@@ -77,22 +79,24 @@ export default function CoachSignupScreen2() {
         number,
         postal_code,
       });
-
-      Alert.alert("Success!", "Verification email sent. Please check your inbox.", [
-        {
-          text: "OK",
-          onPress: () =>
-            navigation.reset({
-              index: 0,
-              routes: [{ name: "Login" }],
-            }),
-        },
-      ]);
-    } catch (err: any) {
-      console.error("Signup error:", err);
-      Alert.alert("Signup Failed", err.message || "Unknown error");
     }
-  };
+
+    // ✅ Always show success alert and navigate to login
+    Alert.alert("Success!", "Verify your email now!", [
+      {
+        text: "OK",
+        onPress: () =>
+          navigation.reset({
+            index: 0,
+            routes: [{ name: "Login" }],
+          }),
+      },
+    ]);
+  } catch (err: any) {
+    console.error("Signup error:", err);
+    Alert.alert("Signup Failed", err.message || "Unknown error");
+  }
+};
 
   const isSubmitDisabled =
     !first_Name.trim() ||

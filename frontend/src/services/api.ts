@@ -1,4 +1,4 @@
-export const BACKEND_URL = "http://172.20.10.3:3000"; // Update as needed
+export const BACKEND_URL = "http://192.168.1.14:3000"; // Update as needed
 
 async function post(endpoint: string, body: any) {
   const url = `${BACKEND_URL}${endpoint}`;
@@ -102,9 +102,54 @@ export const checkEmailExists = async (email: string) => {
 };
 
 export const getCoachDashboard = async (token: string) => {
-  const res = await fetch(`${BACKEND_URL}/api/coach_dashboard/`, {
+  const res = await fetch(`${BACKEND_URL}/api/coach/dashboard`, {
     headers: { Authorization: `Bearer ${token}` }
   });
+  return res.json();
+};
+
+export const getStudentDashboard = async (token: string) => {
+  const res = await fetch(`${BACKEND_URL}/api/student/dashboard`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return res.json();
+};
+
+export const getUserRole = async (token: string | undefined) => {
+  console.log('getUserRole called with token:', token ? 'present' : 'missing');
+  if (!token) throw new Error('No access token provided');
+  
+  const url = `${BACKEND_URL}/api/user/me`;
+  console.log('getUserRole - Making request to:', url);
+  
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  
+  console.log('getUserRole - Response status:', res.status);
+  console.log('getUserRole - Response ok:', res.ok);
+  
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.log('getUserRole - Error response:', errorText);
+    throw new Error('Failed to fetch user role');
+  }
+  
+  const data = await res.json();
+  console.log('getUserRole - Success response:', data);
+  return data;
+};
+
+export const createCoachSession = async (token: string, sessionData: any) => {
+  const res = await fetch(`${BACKEND_URL}/api/coach/session/create`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(sessionData),
+  });
+  if (!res.ok) throw new Error('Failed to create session');
   return res.json();
 };
 

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Send, MoreVertical } from 'lucide-react';
+import { View, Text, TouchableOpacity, TextInput, ScrollView, StyleSheet, Image } from 'react-native';
+import { ArrowLeft, Send, MoreVertical } from 'lucide-react-native';
 
-interface ChatDetailsPageProps {
+interface StudentChatDetailPageProps {
   contact: {
     avatar: string;
     name: string;
@@ -11,7 +12,7 @@ interface ChatDetailsPageProps {
   onBack: () => void;
 }
 
-const ChatDetailsPage: React.FC<ChatDetailsPageProps> = ({ contact, messages, onBack }) => {
+const StudentChatDetailPage: React.FC<StudentChatDetailPageProps> = ({ contact, messages, onBack }) => {
   const [newMessage, setNewMessage] = useState('');
 
   const handleSend = () => {
@@ -22,55 +23,147 @@ const ChatDetailsPage: React.FC<ChatDetailsPageProps> = ({ contact, messages, on
   };
 
   return (
-    <div className="flex flex-col h-screen max-w-md mx-auto bg-gray-50">
+    <View style={styles.container}>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-4 bg-orange-500 text-white">
-        <button onClick={onBack}>
-          <ArrowLeft className="w-6 h-6" />
-        </button>
-        <div className="flex items-center gap-3">
-          <img src={contact.avatar} alt="Avatar" className="w-10 h-10 rounded-full" />
-          <div>
-            <h2 className="text-lg font-bold">{contact.name}</h2>
-            <p className="text-xs text-orange-200">Online</p>
-          </div>
-        </div>
-        <button>
-          <MoreVertical className="w-6 h-6" />
-        </button>
-      </div>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={onBack}>
+          <ArrowLeft size={24} color="white" />
+        </TouchableOpacity>
+        <View style={styles.contactInfo}>
+          <Image source={{ uri: contact.avatar }} style={styles.avatar} />
+          <View>
+            <Text style={styles.contactName}>{contact.name}</Text>
+            <Text style={styles.onlineStatus}>Online</Text>
+          </View>
+        </View>
+        <TouchableOpacity>
+          <MoreVertical size={24} color="white" />
+        </TouchableOpacity>
+      </View>
 
       {/* Messages */}
-      <div className="flex-1 p-4 overflow-y-auto space-y-4">
+      <ScrollView style={styles.messagesContainer}>
         {messages.map((msg, index) => (
-          <div
+          <View
             key={index}
-            className={`max-w-[75%] px-4 py-2 rounded-lg text-sm shadow-sm ${
-              msg.sender === 'me'
-                ? 'ml-auto bg-orange-500 text-white'
-                : 'bg-white text-gray-800'
-            }`}
+            style={[
+              styles.message,
+              msg.sender === 'me' ? styles.myMessage : styles.theirMessage
+            ]}
           >
-            {msg.text}
-          </div>
+            <Text style={[
+              styles.messageText,
+              msg.sender === 'me' ? styles.myMessageText : styles.theirMessageText
+            ]}>
+              {msg.text}
+            </Text>
+          </View>
         ))}
-      </div>
+      </ScrollView>
 
       {/* Input */}
-      <div className="flex items-center px-4 py-3 border-t border-gray-200">
-        <input
-          type="text"
+      <View style={styles.inputContainer}>
+        <TextInput
+          style={styles.textInput}
           value={newMessage}
-          onChange={(e) => setNewMessage(e.target.value)}
+          onChangeText={setNewMessage}
           placeholder="Type your message..."
-          className="flex-1 p-2 border border-gray-300 rounded-lg focus:outline-none"
+          placeholderTextColor="#9ca3af"
         />
-        <button onClick={handleSend} className="ml-3 p-2 bg-orange-500 rounded-full text-white">
-          <Send className="w-5 h-5" />
-        </button>
-      </div>
-    </div>
+        <TouchableOpacity onPress={handleSend} style={styles.sendButton}>
+          <Send size={20} color="white" />
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 };
 
-export default ChatDetailsPage;
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f9fafb',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    backgroundColor: '#f97316',
+  },
+  contactInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginLeft: 12,
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 12,
+  },
+  contactName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  onlineStatus: {
+    fontSize: 12,
+    color: '#fed7aa',
+  },
+  messagesContainer: {
+    flex: 1,
+    padding: 16,
+  },
+  message: {
+    maxWidth: '75%',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  myMessage: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#f97316',
+  },
+  theirMessage: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'white',
+  },
+  messageText: {
+    fontSize: 14,
+  },
+  myMessageText: {
+    color: 'white',
+  },
+  theirMessageText: {
+    color: '#374151',
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+    backgroundColor: 'white',
+  },
+  textInput: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    marginRight: 12,
+    fontSize: 14,
+  },
+  sendButton: {
+    padding: 8,
+    backgroundColor: '#f97316',
+    borderRadius: 20,
+  },
+});
+
+export default StudentChatDetailPage;

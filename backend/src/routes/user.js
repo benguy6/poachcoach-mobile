@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs'); 
 const { supabase } = require('../supabaseClient');
 const { verifySupabaseToken } = require('../middleware/authMiddleware');
+const { getGeoFromPostal } = require('../utils/geocode');
 
 const router = express.Router();
 
@@ -120,7 +121,7 @@ router.post('/signup-coach', async (req, res) => {
     gender,
     number,
     postal_code,
-    qualifications, 
+    qualifications,
     sport,
   } = req.body;
 
@@ -138,40 +139,60 @@ router.post('/signup-coach', async (req, res) => {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
-  const { error: userErr } = await supabase.from('Users').insert([
-    {
+  try {
+    let latitude, longitude;
+    try {
+      const geoData = await getGeoFromPostal(postal_code);
+      latitude = geoData.latitude;
+      longitude = geoData.longitude;
+    } catch (geoError) {
+      console.log('Geolocation failed, using default coordinates:', geoError.message);
+      // Use default coordinates for Singapore
+      latitude = 1.290270;
+      longitude = 103.851959;
+    }
+
+    const { error: userErr } = await supabase.from('Users').insert([
+      {
+        id,
+        email,
+        first_name,
+        last_name,
+        age: age.toString(),
+        gender,
+        number,
+        postal_code,
+        latitude: latitude.toString(),
+        longitude: longitude.toString(),
+        role: 'coach',
+      },
+    ]);
+
+    if (userErr) {
+      console.error('Error inserting into Users:', userErr.message);
+      return res.status(500).json({ error: userErr.message });
+    }
+
+    const coachPayload = {
       id,
-      email,
-      first_name,
-      last_name,
-      age: age.toString(),
-      gender,
-      number,
-      postal_code,
-      role: 'coach',
-    },
-  ]);
+      sport,
+      qualifications,
+    };
 
-  if (userErr) {
-    console.error('Error inserting into Users:', userErr.message);
-    return res.status(500).json({ error: userErr.message });
+    const { error: coachErr } = await supabase.from('Coaches').insert([coachPayload]);
+
+    if (coachErr) {
+      console.error('Error inserting into Coaches:', coachErr.message);
+      return res.status(500).json({ error: coachErr.message });
+    }
+
+    return res.status(201).json({ message: 'Coach registered successfully' });
+  } catch (err) {
+    console.error('Coach signup error:', err.message);
+    return res.status(500).json({ error: 'Failed to create coach account' });
   }
-
-  const coachPayload = {
-    id,
-    sport,
-    qualifications,
-  };
-
-  const { error: coachErr } = await supabase.from('Coaches').insert([coachPayload]);
-
-  if (coachErr) {
-    console.error('Error inserting into Coaches:', coachErr.message);
-    return res.status(500).json({ error: coachErr.message });
-  }
-
-  return res.status(201).json({ message: 'Coach registered successfully' });
 });
+
 
 
 
@@ -192,28 +213,47 @@ router.post('/signup-student', async (req, res) => {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
-  const { error: userErr } = await supabase.from('Users').insert([{
-    id,
-    email,
-    first_name,
-    last_name,
-    age: age.toString(),
-    gender,
-    number,
-    postal_code,
-    role: 'student',
-  }]);
+  try {
+    let latitude, longitude;
+    try {
+      const geoData = await getGeoFromPostal(postal_code);
+      latitude = geoData.latitude;
+      longitude = geoData.longitude;
+    } catch (geoError) {
+      console.log('Geolocation failed, using default coordinates:', geoError.message);
+      // Use default coordinates for Singapore
+      latitude = 1.290270;
+      longitude = 103.851959;
+    }
 
-  if (userErr) {
-    return res.status(500).json({ error: userErr.message });
+    const { error: userErr } = await supabase.from('Users').insert([{
+      id,
+      email,
+      first_name,
+      last_name,
+      age: age.toString(),
+      gender,
+      number,
+      postal_code,
+      latitude: latitude.toString(),
+      longitude: longitude.toString(),
+      role: 'student',
+    }]);
+
+    if (userErr) {
+      return res.status(500).json({ error: userErr.message });
+    }
+
+    const { error: studentErr } = await supabase.from('Students').insert([{ id }]);
+    if (studentErr) {
+      return res.status(500).json({ error: studentErr.message });
+    }
+
+    return res.status(201).json({ message: 'Student metadata stored successfully' });
+  } catch (err) {
+    console.error('Student signup error:', err.message);
+    return res.status(500).json({ error: 'Failed to create student account' });
   }
-
-  const { error: studentErr } = await supabase.from('Students').insert([{ id }]);
-  if (studentErr) {
-    return res.status(500).json({ error: studentErr.message });
-  }
-
-  return res.status(201).json({ message: 'Student metadata stored successfully' });
 });
 
 
@@ -243,13 +283,12 @@ router.post('/login', async (req, res) => {
     });
   }
 
-  // ✅ Query Coaches table using user.id === Coaches.id
+
   const { data: coachData, error: coachError } = await supabase
     .from("Coaches")
     .select("id, has_uploaded_qualifications")
     .eq("id", user.id)
-    .single(); // Will return null if not a coach
-
+    .maybeSingle(); 
   return res.status(200).json({
     message: 'Login successful',
     session,
@@ -272,6 +311,7 @@ router.post('/request-reset-password', async (req, res) => {
     .from('Users')
     .select('id')
     .eq('email', email)
+    .single();
 
   if (userError || !user) {
     return res.status(404).json({ error: 'User not found.' });
@@ -312,50 +352,44 @@ router.post('/reset-password', verifySupabaseToken, async (req, res) => {
 
 
 router.get('/me', verifySupabaseToken, async (req, res) => {
-  try {
-    const userId = req.user.id;
+  const userId = req.user?.id;
 
-    // Get user profile
-    const { data: user, error: userError } = await supabase
-      .from('Users')
-      .select('first_name, last_name, email, role')
-      .eq('id', userId)
-      .single();
-
-    if (userError || !user) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    // Check Coaches table
-    const { data: coach } = await supabase
-      .from('Coaches')
-      .select('id')
-      .eq('id', userId)
-      .single();
-
-    if (coach) {
-      console.log("Returning user:", user);
-      return res.json({ ...user, role: "coach" });
-    }
-    if (student) {
-      console.log("Returning user:", user);
-      return res.json({ ...user, role: "student" });
-    }
-
-    // Check Students table
-    const { data: student } = await supabase
-      .from('Students')
-      .select('id')
-      .eq('id', userId)
-      .single();
-
-    if (student) return res.json({ ...user, role: "student" });
-
-    return res.json({ ...user, role: "unknown" });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Internal server error" });
+  if (!userId) {
+    return res.status(400).json({ error: 'User ID missing from request' });
   }
+
+  const { data: user, error: userError } = await supabase
+    .from('Users')
+    .select('*')
+    .eq('id', userId)
+    .single();
+
+  if (userError || !user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  const { data: coach } = await supabase
+    .from('Coaches')
+    .select('id')
+    .eq('id', userId)
+    .maybeSingle();
+
+  const { data: student } = await supabase
+    .from('Students')
+    .select('id')
+    .eq('id', userId)
+    .maybeSingle();
+
+  let role = 'unknown';
+  if (coach) role = 'coach';
+  else if (student) role = 'student';
+
+  return res.json({
+    id: user.id,
+    first_name: user.first_name,
+    email: user.email,
+    role,
+  });
 });
 
 module.exports = router;

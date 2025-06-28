@@ -28,8 +28,8 @@ import {
   StudentSettingPage,
   StudentChatDetailPage,
   StudentWalletTopUpPage,
+  StudentProfilePage,
 } from "./screens/studentmain";
-import StudentProfilePage from "./screens/studentmain/StudentProfilePage";
 import StudentConfirmPaymentPage from "./screens/studentmain/StudentConfirmPaymentPage";
 
 // Coach Main Screens
@@ -84,7 +84,6 @@ export type StudentTabParamList = {
   StudentProfile: undefined;
 };
 
-// Coach Navigation Types
 export type CoachTabParamList = {
   CoachHome: undefined;
   CoachCalendar: undefined;
@@ -97,7 +96,6 @@ export type CoachMainStackParamList = {
   CoachTabs: undefined;
   CoachNotifications: undefined;
   CoachSettings: undefined;
-  // Add more coach stack screens here if needed
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -106,51 +104,28 @@ const Tab = createBottomTabNavigator<StudentTabParamList>();
 const CoachTab = createBottomTabNavigator<CoachTabParamList>();
 const CoachMainStack = createNativeStackNavigator<CoachMainStackParamList>();
 
-// Student Bottom Tab Navigator
-
-import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-
-const StudentTabs = ({ navigation }: { navigation: BottomTabNavigationProp<StudentTabParamList> }) => {
+const StudentTabs = () => {
   const [showBookeeModal, setShowBookeeModal] = React.useState(false);
+  const modalRef = useRef<any>(null);
+  const tabNavRef = useRef<any>(null);
 
-  interface StudentTabsProps {
-    navigation: {
-      navigate: (tabId: keyof StudentTabParamList, params?: any) => void;
-    };
-  }
-
-  interface Bookee {
-    name: string;
-  }
-
-  const handleTabPress = (tabId: string) => {
+  const handleTabPress = (tabId: keyof StudentTabParamList) => {
     if (tabId === 'StudentBooking') {
       setShowBookeeModal(true);
     } else {
-      navigation.navigate(tabId as keyof StudentTabParamList);
+      tabNavRef.current?.navigate(tabId);
     }
   };
 
-  // Pass a ref to the modal's slideAnim
-  const modalRef = useRef<any>(null);
-
-  interface Bookee {
-    name: string;
-  }
-
-  interface SelectBookeeModalRef {
-    animateOut?: (callback: () => void) => void;
-  }
-
-  const handleSelect = (selected: { name?: string; type: "self" | "child" | "new-child" }) => {
-    if (modalRef.current && modalRef.current.animateOut) {
+  const handleSelect = () => {
+    if (modalRef.current?.animateOut) {
       modalRef.current.animateOut(() => {
         setShowBookeeModal(false);
-        navigation.navigate('StudentBooking');
+        tabNavRef.current?.navigate('StudentBooking');
       });
     } else {
       setShowBookeeModal(false);
-      navigation.navigate('StudentBooking');
+      tabNavRef.current?.navigate('StudentBooking');
     }
   };
 
@@ -158,23 +133,26 @@ const StudentTabs = ({ navigation }: { navigation: BottomTabNavigationProp<Stude
     <>
       <Tab.Navigator
         screenOptions={{ headerShown: false }}
-        tabBar={({ navigation, state }) => (
-          <>
-            <SelectBookeeModal
-              ref={modalRef}
-              visible={showBookeeModal}
-              userName="Vansh"
-              children={[{ name: "Aanya" }]}
-              onClose={() => setShowBookeeModal(false)}
-              onSelect={handleSelect}
-            />
-            <BottomNavigation
-              activeTab={state.routeNames[state.index]}
-              onTabPress={handleTabPress}
-              tabs={studentTabs}
-            />
-          </>
-        )}
+        tabBar={({ navigation, state }) => {
+          tabNavRef.current = navigation;
+          return (
+            <>
+              <SelectBookeeModal
+                ref={modalRef}
+                visible={showBookeeModal}
+                userName="Vansh"
+                children={[{ name: "Aanya" }]}
+                onClose={() => setShowBookeeModal(false)}
+                onSelect={handleSelect}
+              />
+              <BottomNavigation
+                activeTab={state.routeNames[state.index]}
+                onTabPress={handleTabPress}
+                tabs={studentTabs}
+              />
+            </>
+          );
+        }}
       >
         <Tab.Screen name="StudentHome" component={StudentHomePage} />
         <Tab.Screen name="StudentCalendar" component={StudentCalendarPage} />
@@ -195,6 +173,9 @@ const StudentTabs = ({ navigation }: { navigation: BottomTabNavigationProp<Stude
                 phone: "1234567890",
                 profilePicture: "",
                 bio: "",
+                joinDate: "January 2024",
+                goals: "Improve fitness and learn new skills",
+                favoriteActivities: ["Yoga", "Running", "Swimming"],
               }}
               achievements={[]}
               onEdit={() => console.log("Edit profile")}
@@ -207,209 +188,129 @@ const StudentTabs = ({ navigation }: { navigation: BottomTabNavigationProp<Stude
   );
 };
 
-// Coach Bottom Tab Navigator
-const coachTabs = [
-  { id: 'CoachHome', icon: 'home', iconOutline: 'home-outline' },
-  { id: 'CoachCalendar', icon: 'calendar', iconOutline: 'calendar-outline' },
-  { id: 'CoachCreateSession', icon: 'add', iconOutline: 'add', isCenter: true },
-  { id: 'CoachChat', icon: 'chatbubble', iconOutline: 'chatbubble-outline' },
-  { id: 'CoachWallet', icon: 'wallet', iconOutline: 'wallet-outline' },
-];
-
-const CoachTabs = () => (
-  <CoachTab.Navigator
-    screenOptions={{ headerShown: false }}
-    tabBar={({ navigation, state }) => (
-      <BottomNavigation
-        activeTab={state.routeNames[state.index]}
-        onTabPress={(tabId) => navigation.navigate(tabId)}
-        tabs={coachTabs}
-      />
-    )}
-  >
-    <CoachTab.Screen name="CoachHome" component={CoachHomePage} />
-    <CoachTab.Screen name="CoachCalendar" component={CoachCalendarPage} />
-    <CoachTab.Screen name="CoachCreateSession" component={CoachCreateSessionPage} />
-    <CoachTab.Screen name="CoachChat" component={CoachChatPage} />
-    <CoachTab.Screen name="CoachWallet" component={CoachWalletPage} />
-  </CoachTab.Navigator>
-);
-
-// Main App Stack Navigator
-const MainAppStack = () => (
-  <MainStack.Navigator screenOptions={{ headerShown: false }}>
-    {/* Main Tab Navigation */}
-    <MainStack.Screen name="StudentTabs" component={StudentTabs} />
-    
-    {/* Modal/Detail Screens */}
-    <MainStack.Screen name="StudentNotifications" component={StudentNotificationsPage} />
-    
-    <MainStack.Screen name="StudentSettings">
-      {(props) => (
-        <StudentSettingPage
-          {...props}
-          onBack={() => props.navigation.goBack()}
-          onEditProfile={() => console.log("Edit profile")}
-          darkMode={false}
-          setDarkMode={(v) => console.log("Set dark mode:", v)}
-          notifications={{
-            classReminders: true,
-            newMessages: true,
-            promotions: false,
-            weeklyProgress: true,
-          }}
-          setNotifications={(val) => console.log("Set notifications:", val)}
+const CoachTabs = () => {
+  return (
+    <CoachTab.Navigator
+      screenOptions={{ headerShown: false }}
+      tabBar={({ navigation, state }) => (
+        <BottomNavigation
+          activeTab={state.routeNames[state.index]}
+          onTabPress={(tabId) => navigation.navigate(tabId as any)}
+          tabs={[
+            { id: 'CoachHome', icon: 'home', iconOutline: 'home-outline' },
+            { id: 'CoachCalendar', icon: 'calendar', iconOutline: 'calendar-outline' },
+            { id: 'CoachCreateSession', icon: 'add', iconOutline: 'add', isCenter: true },
+            { id: 'CoachChat', icon: 'chatbubble', iconOutline: 'chatbubble-outline' },
+            { id: 'CoachWallet', icon: 'wallet', iconOutline: 'wallet-outline' },
+          ]}
         />
       )}
-    </MainStack.Screen>
-
-    <MainStack.Screen name="StudentChatDetail">
-      {(props) => (
-        <StudentChatDetailPage
-          {...props}
-          contact={props.route.params?.contact}
-          messages={props.route.params?.messages ?? []}
-          onBack={() => props.navigation.goBack()}
-        />
-      )}
-    </MainStack.Screen>
-
-    {/* Wallet Related Screens */}
-    <MainStack.Screen name="StudentWalletTopUp" component={StudentWalletTopUpPage} />
-    
-    <MainStack.Screen name="StudentConfirmPayment">
-      {(props) => (
-        <StudentConfirmPaymentPage
-          {...props}
-          amount={props.route.params?.amount}
-          paymentMethod={props.route.params?.paymentMethod}
-          coachName={props.route.params?.coachName}
-          sessionType={props.route.params?.sessionType}
-          sessionDate={props.route.params?.sessionDate}
-          sessionTime={props.route.params?.sessionTime}
-          pricePerSession={props.route.params?.pricePerSession}
-          onBack={() => props.navigation.goBack()}
-          onConfirm={() => {
-            // Handle payment confirmation
-            console.log("Payment confirmed");
-            props.navigation.navigate("StudentWallet");
-          }}
-        />
-      )}
-    </MainStack.Screen>
-  </MainStack.Navigator>
-);
-
-// Coach Main Stack Navigator
-const CoachMainApp = () => (
-  <CoachMainStack.Navigator screenOptions={{ headerShown: false }}>
-    <CoachMainStack.Screen name="CoachTabs" component={CoachTabs} />
-    <CoachMainStack.Screen name="CoachNotifications" component={CoachNotificationsPage} />
-    <CoachMainStack.Screen name="CoachSettings">
-      {(props) => (
-        <CoachSettingPage
-          {...props}
-          onBack={() => props.navigation.goBack()}
-          onEditProfile={() => console.log("Edit profile")}
-          darkMode={false}
-          setDarkMode={(v) => console.log("Set dark mode:", v)}
-          notifications={{
-            classReminders: true,
-            newMessages: true,
-            promotions: false,
-            weeklyProgress: true,
-          }}
-          setNotifications={(val) => console.log("Set notifications:", val)}
-        />
-      )}
-    </CoachMainStack.Screen>
-    {/* Add more stack screens here if needed */}
-  </CoachMainStack.Navigator>
-);
-
-// Deep Linking Configuration
-const linking = {
-  prefixes: [
-    Linking.createURL("/"),
-    "poachcoach://",
-    "https://yourdomain.com",
-  ],
-  config: {
-    screens: {
-      Entry: "entry",
-      Login: "login",
-      ForgotPasswordScreen: "forgot-password",
-      ResetPassword: "reset-password",
-      CoachSignup1: "coach-signup1",
-      CoachSignup2: "coach-signup2",
-      StudentSignup1: "student-signup1",
-      StudentSignup2: "student-signup2",
-      MainApp: {
-        path: "main",
-        screens: {
-          StudentTabs: {
-            path: "tabs",
-            screens: {
-              StudentHome: "home",
-              StudentCalendar: "calendar",
-              StudentBooking: "booking",
-              StudentChat: "chat",
-              StudentWallet: "wallet",
-              StudentProfile: "profile",
-            },
-          },
-          StudentNotifications: "notifications",
-          StudentSettings: "settings",
-          StudentChatDetail: "chat/:chatId",
-          StudentWalletTopUp: "wallet/topup",
-          StudentConfirmPayment: "wallet/confirm-payment",
-        },
-      },
-      CoachMainApp: {
-        path: "coach",
-        screens: {
-          CoachTabs: {
-            path: "tabs",
-            screens: {
-              CoachHome: "home",
-              CoachCalendar: "calendar",
-              CoachCreateSession: "create-session",
-              CoachChat: "chat",
-              CoachWallet: "wallet",
-            },
-          },
-          CoachNotifications: "notifications",
-          CoachSettings: "settings",
-        },
-      },
-    },
-  },
+    >
+      <CoachTab.Screen name="CoachHome" component={CoachHomePage} />
+      <CoachTab.Screen name="CoachCalendar" component={CoachCalendarPage} />
+      <CoachTab.Screen name="CoachCreateSession" component={CoachCreateSessionPage} />
+      <CoachTab.Screen name="CoachChat" component={CoachChatPage} />
+      <CoachTab.Screen name="CoachWallet" component={CoachWalletPage} />
+    </CoachTab.Navigator>
+  );
 };
 
-// Main App Component
-export default function App() {
+// Create wrapper components for screens that need props
+const StudentSettingsWrapper = (props: any) => (
+  <StudentSettingPage
+    {...props}
+    onBack={() => props.navigation.goBack()}
+    onEditProfile={() => console.log("Edit profile")}
+    darkMode={false}
+    setDarkMode={() => {}}
+    notifications={{
+      classReminders: true,
+      messages: true,
+      payments: true,
+      achievements: true,
+      marketing: false,
+    }}
+    setNotifications={() => {}}
+  />
+);
+
+const StudentChatDetailWrapper = (props: any) => (
+  <StudentChatDetailPage
+    {...props}
+    contact={{ avatar: '', name: '' }}
+    messages={[]}
+    onBack={() => props.navigation.goBack()}
+  />
+);
+
+const CoachSettingsWrapper = (props: any) => (
+  <CoachSettingPage
+    {...props}
+    onBack={() => props.navigation.goBack()}
+    onEditProfile={() => console.log("Edit profile")}
+    darkMode={false}
+    setDarkMode={() => {}}
+    notifications={{
+      classReminders: true,
+      messages: true,
+      payments: true,
+      achievements: true,
+      marketing: false,
+    }}
+    setNotifications={() => {}}
+  />
+);
+
+const App = () => {
   return (
-    <NavigationContainer linking={linking}>
-      <Stack.Navigator 
-        initialRouteName="Entry" 
+    <NavigationContainer>
+      <Stack.Navigator
         screenOptions={{ headerShown: false }}
+        initialRouteName="Entry"
       >
-        {/* Authentication Flow */}
         <Stack.Screen name="Entry" component={EntryPage} />
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="ForgotPasswordScreen" component={ForgotPasswordScreen} />
         <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
-
-        {/* Signup Flow */}
         <Stack.Screen name="CoachSignup1" component={CoachSignupScreen1} />
         <Stack.Screen name="CoachSignup2" component={CoachSignupScreen2} />
         <Stack.Screen name="StudentSignup1" component={StudentSignupScreen1} />
         <Stack.Screen name="StudentSignup2" component={StudentSignupScreen2} />
-
-        {/* Main Application */}
-        <Stack.Screen name="MainApp" component={MainAppStack} />
+        
+        <Stack.Screen name="MainApp" component={MainApp} />
         <Stack.Screen name="CoachMainApp" component={CoachMainApp} />
       </Stack.Navigator>
     </NavigationContainer>
   );
-}
+};
+
+const MainApp = () => {
+  return (
+    <MainStack.Navigator
+      screenOptions={{ headerShown: false }}
+      initialRouteName="StudentTabs"
+    >
+      <MainStack.Screen name="StudentTabs" component={StudentTabs} />
+      <MainStack.Screen name="StudentNotifications" component={StudentNotificationsPage} />
+      <MainStack.Screen name="StudentSettings" component={StudentSettingsWrapper} />
+      <MainStack.Screen name="StudentChatDetail" component={StudentChatDetailWrapper} />
+      <MainStack.Screen name="StudentWalletTopUp" component={StudentWalletTopUpPage} />
+      <MainStack.Screen name="StudentConfirmPayment" component={StudentConfirmPaymentPage} />
+    </MainStack.Navigator>
+  );
+};
+
+const CoachMainApp = () => {
+  return (
+    <CoachMainStack.Navigator
+      screenOptions={{ headerShown: false }}
+      initialRouteName="CoachTabs"
+    >
+      <CoachMainStack.Screen name="CoachTabs" component={CoachTabs} />
+      <CoachMainStack.Screen name="CoachNotifications" component={CoachNotificationsPage} />
+      <CoachMainStack.Screen name="CoachSettings" component={CoachSettingsWrapper} />
+    </CoachMainStack.Navigator>
+  );
+};
+
+export default App;
