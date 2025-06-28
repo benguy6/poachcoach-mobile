@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import BottomNavigation from '../../components/BottomNavigation';
-import { BACKEND_URL, getStudentDashboard } from '../../services/api'; 
+import { BACKEND_URL } from '../../services/api'; 
 import { studentTabs } from '../../constants/studentTabs';
 import { supabase } from '../../services/supabase';
 
@@ -31,27 +31,29 @@ interface HomePageProps {
 const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
   const [notifications] = useState(2);
   const [activeTab, setActiveTab] = useState('home');
-  const [student, setStudent] = useState<any>(null);
-  const [sessions, setSessions] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [firstName, setFirstName] = useState(''); // <-- Add this
 
   useEffect(() => {
-    const fetchDashboard = async () => {
-      setLoading(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) return;
+    const fetchUser = async () => {
       try {
-        const data = await getStudentDashboard(token);
-        setStudent(data.user);
-        setSessions(data.sessions);
-      } catch (err) {
-        console.error('Failed to fetch student dashboard:', err);
-      } finally {
-        setLoading(false);
+        const { data: sessionData, error } = await supabase.auth.getSession();
+        console.log('Session Data:', sessionData); // <-- Add this line
+
+        const accessToken = sessionData.session?.access_token;
+        if (!accessToken) throw new Error('No access token found');
+
+        const response = await fetch(`${BACKEND_URL}/api/user/me`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+
+        const dataJson = await response.json();
+        setFirstName(dataJson.first_name);
+      } catch (error) {
+        console.error('Failed to fetch user info', error);
       }
     };
-    fetchDashboard();
+
+    fetchUser();
   }, []);
 
   const chats: Chat[] = [
@@ -124,11 +126,11 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
         <TouchableOpacity style={styles.profileSection} onPress={handleProfilePress}>
           <View style={styles.profileContainer}>
             <Image
-              source={{ uri: student?.profilePicture || 'https://randomuser.me/api/portraits/men/1.jpg' }}
+              source={{ uri: 'https://randomuser.me/api/portraits/men/1.jpg' }}
               style={styles.profileImage}
             />
             <View style={styles.profileText}>
-              <Text style={styles.greeting}>Hello, {student?.name || 'Student'}!</Text>
+              <Text style={styles.greeting}>Hello, {firstName || 'Student'}!</Text>
               <Text style={styles.subGreeting}>Ready for your next session?</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="#fed7aa" />
@@ -139,63 +141,53 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
         <View style={styles.contentContainer}>
           {/* Upcoming Class Card */}
           <View style={styles.upcomingCard}>
-            <Text style={styles.upcomingTitle}>Upcoming Classes</Text>
+            <Text style={styles.upcomingTitle}>Upcoming Class</Text>
             
-            {loading ? (
-              <Text style={styles.loadingText}>Loading...</Text>
-            ) : !sessions || sessions.length === 0 ? (
-              <Text style={styles.noSessionsText}>No upcoming sessions.</Text>
-            ) : (
-              sessions.map((session, idx) => (
-                <View key={session.id || idx} style={styles.classDetails}>
-                  {/* Confirmation Banner */}
-                  <View style={styles.confirmationBanner}>
-                    <View style={styles.checkIcon}>
-                      <Ionicons name="checkmark" size={16} color="white" />
-                    </View>
-                    <View style={styles.confirmationText}>
-                      <Text style={styles.confirmationTitle}>Your class is confirmed!</Text>
-                      <Text style={styles.confirmationSubtitle}>{session.class_type || 'Session'}</Text>
-                    </View>
-                  </View>
+            {/* Confirmation Banner */}
+            <View style={styles.confirmationBanner}>
+              <View style={styles.checkIcon}>
+                <Ionicons name="checkmark" size={16} color="white" />
+              </View>
+              <View style={styles.confirmationText}>
+                <Text style={styles.confirmationTitle}>Your class is confirmed!</Text>
+                <Text style={styles.confirmationSubtitle}>Yoga Basics with Sarah Johnson</Text>
+              </View>
+            </View>
 
-                  {/* Class Details */}
-                  <View style={styles.classDetails}>
-                    <View style={styles.classHeader}>
-                      <Text style={styles.className}>{session.class_type || 'Session'}</Text>
-                      <View style={styles.todayBadge}>
-                        <Text style={styles.todayText}>Today</Text>
-                      </View>
-                    </View>
-                    <Text style={styles.instructorName}>With Coach</Text>
-                    
-                    <View style={styles.classInfo}>
-                      <View style={styles.infoRow}>
-                        <Ionicons name="time-outline" size={16} color="#6b7280" />
-                        <Text style={styles.infoText}>{session.start_time} - {session.end_time}</Text>
-                      </View>
-                      <View style={styles.infoRow}>
-                        <Ionicons name="location-outline" size={16} color="#6b7280" />
-                        <Text style={styles.infoText}>{session.location_name || 'N/A'}</Text>
-                      </View>
-                      <View style={styles.infoRow}>
-                        <Ionicons name="people-outline" size={16} color="#6b7280" />
-                        <Text style={styles.infoText}>{session.students_attending || 0} people attending</Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.buttonRow}>
-                      <TouchableOpacity style={styles.viewDetailsButton}>
-                        <Text style={styles.viewDetailsText}>View Details</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.cancelButton}>
-                        <Text style={styles.cancelText}>Cancel Class</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
+            {/* Class Details */}
+            <View style={styles.classDetails}>
+              <View style={styles.classHeader}>
+                <Text style={styles.className}>Yoga Basics</Text>
+                <View style={styles.todayBadge}>
+                  <Text style={styles.todayText}>Today</Text>
                 </View>
-              ))
-            )}
+              </View>
+              <Text style={styles.instructorName}>With Sarah Johnson</Text>
+              
+              <View style={styles.classInfo}>
+                <View style={styles.infoRow}>
+                  <Ionicons name="time-outline" size={16} color="#6b7280" />
+                  <Text style={styles.infoText}>10:00 AM - 11:00 AM</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Ionicons name="location-outline" size={16} color="#6b7280" />
+                  <Text style={styles.infoText}>Wellness Studio, 123 Main Street</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Ionicons name="people-outline" size={16} color="#6b7280" />
+                  <Text style={styles.infoText}>15 people attending</Text>
+                </View>
+              </View>
+
+              <View style={styles.buttonRow}>
+                <TouchableOpacity style={styles.viewDetailsButton}>
+                  <Text style={styles.viewDetailsText}>View Details</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.cancelButton}>
+                  <Text style={styles.cancelText}>Cancel Class</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
 
           {/* Recent Messages Card */}
@@ -523,18 +515,6 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 11,
     fontWeight: 'bold',
-  },
-  loadingText: {
-    fontSize: 14,
-    color: '#6b7280',
-    textAlign: 'center',
-    padding: 20,
-  },
-  noSessionsText: {
-    fontSize: 14,
-    color: '#6b7280',
-    textAlign: 'center',
-    padding: 20,
   },
 });
 
