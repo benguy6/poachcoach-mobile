@@ -21,52 +21,35 @@ import {
   Settings,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { uploadProfilePicture } from '../../services/api'; // adjust path as needed
-import { getToken } from '../../services/auth';
-import { useRoute, RouteProp, useNavigation } from '@react-navigation/native';
 
-type Achievement = {
-  id: string | number;
-  icon: string;
-  title: string;
-  date: string;
+// Dummy upload function for coach profile picture
+const uploadCoachProfilePicture = async (uri: string) => {
+  // Simulate upload delay
+  return new Promise<string>((resolve) => setTimeout(() => resolve(uri), 1000));
 };
 
-type UserProfile = {
-  name: string;
-  level: string | number;
-  location: string;
-  totalClasses: number;
-  email: string;
-  phone: string;
-  joinDate: string;
-  goals: string;
-  favoriteActivities: string[];
-  profilePicture?: string;
-  bio?: string;
+const dummyCoachProfile = {
+  name: 'Coach Alex Smith',
+  level: 'Elite',
+  location: 'New York, NY',
+  totalClasses: 120,
+  email: 'alex.smith@coach.com',
+  phone: '+1 555-123-4567',
+  joinDate: 'Jan 2020',
+  goals: 'Help athletes reach their full potential.',
+  favoriteActivities: ['Basketball', 'Yoga', 'Running'],
+  profilePicture: 'https://randomuser.me/api/portraits/men/32.jpg',
+  bio: 'Passionate about coaching and fitness.',
 };
 
-type ProfilePageProps = {
-  userProfile: UserProfile;
-  achievements: Achievement[];
-  onEdit: () => void;
-  onSettings: () => void;
-};
+const dummyAchievements = [
+  { id: 1, icon: '🏆', title: 'Coach of the Year', date: '2023' },
+  { id: 2, icon: '🥇', title: 'Regional Champion', date: '2022' },
+  { id: 3, icon: '🎖️', title: '100+ Classes', date: '2021' },
+];
 
-type StudentProfilePageRouteParams = {
-  onProfilePicChange?: (url: string) => void;
-};
-
-const StudentProfilePage: React.FC<ProfilePageProps> = ({
-  userProfile,
-  achievements,
-  onEdit,
-  onSettings,
-}) => {
-  const [profilePic, setProfilePic] = React.useState(userProfile.profilePicture || 'https://randomuser.me/api/portraits/men/1.jpg');
-  const route = useRoute<RouteProp<{ params: StudentProfilePageRouteParams }, 'params'>>();
-  const navigation = useNavigation();
-  const onProfilePicChange = route.params?.onProfilePicChange;
+const CoachProfilePage: React.FC = () => {
+  const [profilePic, setProfilePic] = React.useState(dummyCoachProfile.profilePicture);
 
   const handlePickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -75,14 +58,10 @@ const StudentProfilePage: React.FC<ProfilePageProps> = ({
       aspect: [1, 1],
       quality: 0.7,
     });
-
     if (!result.canceled && result.assets && result.assets.length > 0) {
       try {
-        const uploadedUrl = await uploadProfilePicture(result.assets[0].uri);
+        const uploadedUrl = await uploadCoachProfilePicture(result.assets[0].uri);
         setProfilePic(uploadedUrl);
-        if (onProfilePicChange) {
-          onProfilePicChange(uploadedUrl);
-        }
       } catch (e) {
         console.error('Upload error:', e);
         alert('Failed to upload image');
@@ -94,65 +73,54 @@ const StudentProfilePage: React.FC<ProfilePageProps> = ({
     <ScrollView style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <Text style={styles.title}>Profile</Text>
-          <TouchableOpacity style={styles.iconButton} onPress={onSettings}>
-            <Settings size={20} color="white" />
+          <Text style={styles.title}>Coach Profile</Text>
+          <TouchableOpacity style={styles.iconButton} onPress={() => {}}>
+            <Settings size={20} color="#fb923c" />
           </TouchableOpacity>
         </View>
-
         <View style={styles.profileSection}>
           <View style={styles.avatarContainer}>
-            <Image
-              source={{ uri: profilePic }}
-              style={styles.avatar}
-            />
+            <Image source={{ uri: profilePic }} style={styles.avatar} />
             <TouchableOpacity style={styles.cameraButton} onPress={handlePickImage}>
-              <Camera size={16} color="#333" />
+              <Camera size={16} color="#18181b" />
             </TouchableOpacity>
           </View>
           <View style={styles.profileText}>
-            <Text style={styles.name}>{userProfile.name}</Text>
-            <Text style={styles.level}>{userProfile.level} Level</Text>
+            <Text style={styles.name}>{dummyCoachProfile.name}</Text>
+            <Text style={styles.level}>{dummyCoachProfile.level} Level</Text>
             <View style={styles.locationRow}>
-              <MapPin size={14} color="#fff" />
-              <Text style={styles.location}>{userProfile.location}</Text>
+              <MapPin size={14} color="#fb923c" />
+              <Text style={styles.location}>{dummyCoachProfile.location}</Text>
             </View>
           </View>
-          <TouchableOpacity style={styles.iconButton} onPress={onEdit}>
-            <Edit size={20} color="white" />
+          <TouchableOpacity style={styles.iconButton} onPress={() => {}}>
+            <Edit size={20} color="#fb923c" />
           </TouchableOpacity>
         </View>
       </View>
-
       <View style={styles.body}>
         <View style={styles.statsRow}>
-          <StatCard label="Classes Taken" value={userProfile.totalClasses} />
-          <StatCard label="Achievements" value={achievements.length} />
-          <StatCard label="Avg Rating" value="4.8" />
+          <StatCard label="Classes Taught" value={dummyCoachProfile.totalClasses} />
+          <StatCard label="Achievements" value={dummyAchievements.length} />
+          <StatCard label="Avg Rating" value="4.9" />
         </View>
-
         <InfoCard icon={<User size={16} />} title="About">
-          <InfoRow icon={<Mail size={14} />} text={userProfile.email} />
-          <InfoRow icon={<Phone size={14} />} text={userProfile.phone} />
-          <InfoRow icon={<Calendar size={14} />} text={`Joined ${userProfile.joinDate}`} />
+          <InfoRow icon={<Mail size={14} />} text={dummyCoachProfile.email} />
+          <InfoRow icon={<Phone size={14} />} text={dummyCoachProfile.phone} />
+          <InfoRow icon={<Calendar size={14} />} text={`Joined ${dummyCoachProfile.joinDate}`} />
         </InfoCard>
-
         <InfoCard icon={<Target size={16} />} title="Goals">
-          <Text style={styles.paragraph}>{userProfile.goals}</Text>
+          <Text style={styles.paragraph}>{dummyCoachProfile.goals}</Text>
         </InfoCard>
-
         <InfoCard icon={<Bookmark size={16} />} title="Favorite Activities">
           <View style={styles.tags}>
-            {userProfile.favoriteActivities.map((act) => (
-              <Text key={act} style={styles.tag}>
-                {act}
-              </Text>
+            {dummyCoachProfile.favoriteActivities.map((act) => (
+              <Text key={act} style={styles.tag}>{act}</Text>
             ))}
           </View>
         </InfoCard>
-
         <InfoCard icon={<Award size={16} />} title="Recent Achievements">
-          {achievements.map((ach) => (
+          {dummyAchievements.map((ach) => (
             <View key={ach.id} style={styles.achievementRow}>
               <View style={styles.achievementIcon}>
                 <Text style={{ fontSize: 16 }}>{ach.icon}</Text>
@@ -204,13 +172,15 @@ const InfoRow = ({ icon, text }: { icon: React.ReactNode; text: string }) => (
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#18181b', // black background
   },
   header: {
-    backgroundColor: '#F97316',
+    backgroundColor: '#18181b', // black header
     paddingTop: 64,
     paddingBottom: 24,
     paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#27272a',
   },
   headerTop: {
     flexDirection: 'row',
@@ -220,7 +190,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: 'white',
+    color: '#fb923c', // orange title
   },
   profileSection: {
     flexDirection: 'row',
@@ -235,13 +205,13 @@ const styles = StyleSheet.create({
     height: 72,
     borderRadius: 36,
     borderWidth: 3,
-    borderColor: 'white',
+    borderColor: '#fb923c', // orange border
   },
   cameraButton: {
     position: 'absolute',
     bottom: -4,
     right: -4,
-    backgroundColor: 'white',
+    backgroundColor: '#fb923c', // orange button
     padding: 6,
     borderRadius: 20,
     elevation: 2,
@@ -257,7 +227,7 @@ const styles = StyleSheet.create({
   },
   level: {
     fontSize: 14,
-    color: '#FFDAB9',
+    color: '#fed7aa', // light orange
     marginBottom: 4,
   },
   locationRow: {
@@ -271,7 +241,7 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     padding: 8,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(251,146,60,0.15)', // faded orange
     borderRadius: 20,
   },
   body: {
@@ -284,7 +254,7 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    backgroundColor: 'white',
+    backgroundColor: '#27272a', // dark card
     borderRadius: 12,
     padding: 12,
     marginHorizontal: 4,
@@ -293,14 +263,14 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#F97316',
+    color: '#fb923c', // orange
   },
   statLabel: {
     fontSize: 12,
-    color: '#6B7280',
+    color: '#d1d5db', // gray
   },
   infoCard: {
-    backgroundColor: 'white',
+    backgroundColor: '#27272a', // dark card
     borderRadius: 12,
     padding: 16,
     marginBottom: 20,
@@ -314,6 +284,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontWeight: '600',
     fontSize: 14,
+    color: '#fb923c', // orange
   },
   infoRow: {
     flexDirection: 'row',
@@ -322,11 +293,11 @@ const styles = StyleSheet.create({
   },
   infoText: {
     marginLeft: 8,
-    color: '#4B5563',
+    color: '#d1d5db', // gray
     fontSize: 14,
   },
   paragraph: {
-    color: '#4B5563',
+    color: '#d1d5db', // gray
     fontSize: 14,
   },
   tags: {
@@ -335,14 +306,15 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   tag: {
-    backgroundColor: '#FFEAD0',
-    color: '#F97316',
+    backgroundColor: '#fb923c', // orange
+    color: '#18181b', // black text
     paddingVertical: 4,
     paddingHorizontal: 12,
     borderRadius: 20,
     fontSize: 12,
     marginRight: 8,
     marginBottom: 8,
+    fontWeight: 'bold',
   },
   achievementRow: {
     flexDirection: 'row',
@@ -353,7 +325,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#FFEAD0',
+    backgroundColor: '#fed7aa', // light orange
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -361,12 +333,12 @@ const styles = StyleSheet.create({
   achievementTitle: {
     fontWeight: '600',
     fontSize: 14,
+    color: 'white',
   },
   achievementDate: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: '#fb923c', // orange
   },
 });
 
-export default StudentProfilePage;
-
+export default CoachProfilePage;

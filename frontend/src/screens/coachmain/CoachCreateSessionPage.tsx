@@ -29,6 +29,7 @@ import {
 } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
+const gridWidth = width - 64;
 
 const sports = [
   'Yoga', 'Baseball', 'Basketball', 'Soccer', 'Tennis', 'Swimming',
@@ -36,12 +37,14 @@ const sports = [
 ];
 
 const timeSlots = [
-  '07:00', '07:30', '08:00', '08:30', '09:00',
-  '09:30', '10:00', '10:30', '11:00', '11:30',
-  '12:00', '12:30', '13:00', '13:30', '14:00',
-  '14:30', '15:00', '15:30', '16:00', '16:30',
-  '17:00', '17:30', '18:00', '18:30', '19:00',
-  '19:30', '20:00'
+  '07:00', '07:15', '07:30', '07:45', '08:00', '08:15', '08:30', '08:45',
+  '09:00', '09:15', '09:30', '09:45', '10:00', '10:15', '10:30', '10:45',
+  '11:00', '11:15', '11:30', '11:45', '12:00', '12:15', '12:30', '12:45',
+  '13:00', '13:15', '13:30', '13:45', '14:00', '14:15', '14:30', '14:45',
+  '15:00', '15:15', '15:30', '15:45', '16:00', '16:15', '16:30', '16:45',
+  '17:00', '17:15', '17:30', '17:45', '18:00', '18:15', '18:30', '18:45',
+  '19:00', '19:15', '19:30', '19:45', '20:00', '20:15', '20:30', '20:45',
+  '21:00', '21:15', '21:30', '21:45', '22:00'
 ];
 
 const daysOfWeek = [
@@ -99,6 +102,8 @@ const CoachCreateSessionPage = () => {
     price: string;
     description: string;
     sessionType: string;
+    numberOfWeeks?: string;
+    startDate?: string;
   }
 
   const [sessionData, setSessionData] = useState<SessionData>({
@@ -114,12 +119,12 @@ const CoachCreateSessionPage = () => {
     maxStudents: '',
     price: '',
     description: '',
-    sessionType: ''
+    sessionType: '',
+    numberOfWeeks: '',
+    startDate: ''
   });
 
   const [showSportDropdown, setShowSportDropdown] = useState(false);
-  const [showStartDropdown, setShowStartDropdown] = useState(false);
-  const [showEndDropdown, setShowEndDropdown] = useState(false);
   const [showStudentDropdown, setShowStudentDropdown] = useState(false);
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
@@ -127,7 +132,10 @@ const CoachCreateSessionPage = () => {
   const [clashError, setClashError] = useState<string | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(new Date(currentYear, currentMonth, 1));
   const [recurringType, setRecurringType] = useState<string>('weekly');
-  const [repeatCount, setRepeatCount] = useState<string>('');
+
+  // Time slider states
+  const [timeRange, setTimeRange] = useState([0, 1]);
+  const [maxStudentsValue, setMaxStudentsValue] = useState(2);
 
   useEffect(() => {
     (async () => {
@@ -196,7 +204,7 @@ const CoachCreateSessionPage = () => {
         recurring_type: sessionData.sessionType === 'recurring' ? recurringType : undefined,
         recurring_days: sessionData.sessionType === 'recurring' && recurringType === 'weekly' ? sessionData.recurringDays : undefined,
         recurring_dates: sessionData.sessionType === 'recurring' && recurringType === 'monthly' ? sessionData.monthlyDates : undefined,
-        repeat_count: sessionData.sessionType === 'recurring' ? repeatCount : undefined,
+        repeat_count: sessionData.sessionType === 'recurring' && recurringType === 'weekly' ? sessionData.numberOfWeeks : undefined,
         price_per_session: sessionData.price,
         description: sessionData.description,
         age_range_start: sessionData.minAge,
@@ -216,9 +224,39 @@ const CoachCreateSessionPage = () => {
     }
   };
 
+  // Helper function to convert time index to time string
+  const getTimeFromIndex = (index: number) => {
+    return timeSlots[index] || '07:00';
+  };
+
+  // Helper function to convert time string to index
+  const getIndexFromTime = (time: string) => {
+    return timeSlots.indexOf(time);
+  };
+
+  // Update session data when time range changes
+  useEffect(() => {
+    setSessionData(prev => ({
+      ...prev,
+      startTime: getTimeFromIndex(timeRange[0]),
+      endTime: getTimeFromIndex(timeRange[1])
+    }));
+  }, [timeRange]);
+
+  // Update session data when max students changes
+  useEffect(() => {
+    setSessionData(prev => ({
+      ...prev,
+      maxStudents: maxStudentsValue.toString()
+    }));
+  }, [maxStudentsValue]);
+
   // Helper to get days in month and first day
   const daysInMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0).getDate();
   const firstDayOfMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1).getDay();
+  
+  // Calculate total cells needed to ensure full weeks are shown (always 6 rows)
+  const totalCells = 42; // 6 rows × 7 days = 42 cells
 
   const handleCalendarDayPress = (day: number) => {
     const dateStr = `${calendarMonth.getFullYear()}-${String(calendarMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -227,31 +265,55 @@ const CoachCreateSessionPage = () => {
 
   const renderStaticCalendar = () => {
     const days = [];
+    // Add empty cells for days before the first day of the month
     for (let i = 0; i < firstDayOfMonth; i++) {
-      days.push(<View key={`empty-${i}`} style={styles.calendarEmptyCell} />);
+      days.push({ type: 'empty', key: `empty-${i}` });
     }
+    // Add cells for each day of the month
     for (let day = 1; day <= daysInMonth; day++) {
-      const dateStr = `${calendarMonth.getFullYear()}-${String(calendarMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      const isSelected = (sessionData.monthlyDates && sessionData.monthlyDates.includes(dateStr));
-      days.push(
-        <TouchableOpacity
-          key={day}
-          onPress={() => handleCalendarDayPress(day)}
-          style={[
-            styles.calendarDay,
-            isSelected && styles.calendarDaySelected,
-          ]}
-        >
-          <Text style={[
-            styles.calendarDayText,
-            isSelected ? { color: '#fff' } : { color: '#9ca3af' }
-          ]}>
-            {day}
-          </Text>
-        </TouchableOpacity>
-      );
+      days.push({ type: 'day', day, key: `day-${day}` });
     }
-    return days;
+    // Add empty cells to complete the grid (always 42 cells)
+    while (days.length < 42) {
+      days.push({ type: 'empty', key: `empty-end-${days.length}` });
+    }
+
+    // Split into 6 rows of 7 cells
+    const rows = [];
+    for (let i = 0; i < 6; i++) {
+      rows.push(days.slice(i * 7, (i + 1) * 7));
+    }
+
+    return rows.map((row, rowIndex) => (
+      <View key={`row-${rowIndex}`} style={{ flexDirection: 'row' }}>
+        {row.map(cell => {
+          if (cell.type === 'empty') {
+            return <View key={cell.key} style={styles.calendarEmptyCell} />;
+          } else {
+            const day = cell.day;
+            const dateStr = `${calendarMonth.getFullYear()}-${String(calendarMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const isSelected = (sessionData.monthlyDates && sessionData.monthlyDates.includes(dateStr));
+            return (
+              <TouchableOpacity
+                key={cell.key}
+                onPress={() => typeof day === 'number' && handleCalendarDayPress(day)}
+                style={[
+                  styles.calendarDay,
+                  isSelected && styles.calendarDaySelected,
+                ]}
+              >
+                <Text style={[
+                  styles.calendarDayText,
+                  isSelected ? { color: '#fff' } : { color: '#9ca3af' }
+                ]}>
+                  {day}
+                </Text>
+              </TouchableOpacity>
+            );
+          }
+        })}
+      </View>
+    ));
   };
 
   // Step 1: Sport & Session Type
@@ -351,69 +413,35 @@ const CoachCreateSessionPage = () => {
       <View style={styles.stepContainer}>
         <Text style={styles.stepTitle}>Schedule</Text>
 
-        {/* Start Time */}
-        <Text style={styles.label}>Start Time</Text>
-        <TouchableOpacity
-          style={styles.dropdownButton}
-          onPress={() => setShowStartDropdown(true)}
-        >
-          <Text style={sessionData.startTime ? styles.dropdownText : styles.dropdownPlaceholder}>
-            {sessionData.startTime || 'Select start time'}
-          </Text>
-          <ChevronDown size={20} color="#9ca3af" />
-        </TouchableOpacity>
-        <Modal visible={showStartDropdown} transparent animationType="fade">
-          <TouchableOpacity style={styles.modalOverlay} onPress={() => setShowStartDropdown(false)}>
-            <View style={styles.dropdownModal}>
-              <ScrollView>
-                {timeSlots.map((time) => (
-                  <TouchableOpacity
-                    key={time}
-                    style={styles.dropdownOption}
-                    onPress={() => {
-                      setSessionData({ ...sessionData, startTime: time });
-                      setShowStartDropdown(false);
-                    }}
-                  >
-                    <Text style={styles.dropdownText}>{time}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          </TouchableOpacity>
-        </Modal>
-
-        {/* End Time */}
-        <Text style={styles.label}>End Time</Text>
-        <TouchableOpacity
-          style={styles.dropdownButton}
-          onPress={() => setShowEndDropdown(true)}
-        >
-          <Text style={sessionData.endTime ? styles.dropdownText : styles.dropdownPlaceholder}>
-            {sessionData.endTime || 'Select end time'}
-          </Text>
-          <ChevronDown size={20} color="#9ca3af" />
-        </TouchableOpacity>
-        <Modal visible={showEndDropdown} transparent animationType="fade">
-          <TouchableOpacity style={styles.modalOverlay} onPress={() => setShowEndDropdown(false)}>
-            <View style={styles.dropdownModal}>
-              <ScrollView>
-                {timeSlots.map((time) => (
-                  <TouchableOpacity
-                    key={time}
-                    style={styles.dropdownOption}
-                    onPress={() => {
-                      setSessionData({ ...sessionData, endTime: time });
-                      setShowEndDropdown(false);
-                    }}
-                  >
-                    <Text style={styles.dropdownText}>{time}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          </TouchableOpacity>
-        </Modal>
+        {/* Time Range */}
+        <Text style={styles.label}>Time: {getTimeFromIndex(timeRange[0])} - {getTimeFromIndex(timeRange[1])}</Text>
+        <View style={styles.timeSliderContainer}>
+          <MultiSlider
+            values={timeRange}
+            min={0}
+            max={timeSlots.length - 1}
+            step={1}
+            sliderLength={width - 80}
+            onValuesChange={setTimeRange}
+            selectedStyle={{ backgroundColor: '#fb923c' }}
+            unselectedStyle={{ backgroundColor: '#374151' }}
+            containerStyle={{ height: 40 }}
+            trackStyle={{ height: 4, borderRadius: 2 }}
+            markerStyle={{
+              backgroundColor: '#fb923c',
+              height: 20,
+              width: 20,
+              borderRadius: 10,
+              borderWidth: 2,
+              borderColor: '#fff'
+            }}
+          />
+          <View style={styles.timeLabels}>
+            <Text style={styles.timeLabel}>{timeSlots[0]}</Text>
+            <Text style={styles.timeLabel}>{timeSlots[Math.floor((timeSlots.length - 1) / 2)]}</Text>
+            <Text style={styles.timeLabel}>{timeSlots[timeSlots.length - 1]}</Text>
+          </View>
+        </View>
 
         {/* Single Class: Date Selection */}
         {sessionData.sessionType === 'single' && (
@@ -442,36 +470,7 @@ const CoachCreateSessionPage = () => {
                   <Text key={day} style={styles.dayOfWeekText}>{day}</Text>
                 ))}
               </View>
-              <View style={styles.calendarGrid}>
-                {(() => {
-                  const days = [];
-                  for (let i = 0; i < firstDayOfMonth; i++) {
-                    days.push(<View key={`empty-${i}`} style={styles.calendarEmptyCell} />);
-                  }
-                  for (let day = 1; day <= daysInMonth; day++) {
-                    const dateStr = `${calendarMonth.getFullYear()}-${String(calendarMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                    const isSelected = sessionData.monthlyDates[0] === dateStr;
-                    days.push(
-                      <TouchableOpacity
-                        key={day}
-                        onPress={() => setSessionData({ ...sessionData, monthlyDates: [dateStr] })}
-                        style={[
-                          styles.calendarDay,
-                          isSelected && styles.calendarDaySelected,
-                        ]}
-                      >
-                        <Text style={[
-                          styles.calendarDayText,
-                          isSelected ? { color: '#fff' } : { color: '#9ca3af' }
-                        ]}>
-                          {day}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  }
-                  return days;
-                })()}
-              </View>
+              <View style={styles.calendarGrid}>{renderStaticCalendar()}</View>
             </View>
           </>
         )}
@@ -505,20 +504,28 @@ const CoachCreateSessionPage = () => {
               </TouchableOpacity>
             </View>
 
-            {/* Repeat Count */}
-            <Text style={styles.label}>Number of sessions</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g., 8"
-              placeholderTextColor="#9ca3af"
-              keyboardType="numeric"
-              value={repeatCount}
-              onChangeText={setRepeatCount}
-            />
-
-            {/* Weekly: Recurring Days */}
+            {/* Weekly: Number of Weeks and Start Date */}
             {recurringType === 'weekly' && (
               <>
+                <Text style={styles.label}>Number of weeks</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g., 8"
+                  placeholderTextColor="#9ca3af"
+                  keyboardType="numeric"
+                  value={sessionData.numberOfWeeks}
+                  onChangeText={(val) => setSessionData({ ...sessionData, numberOfWeeks: val })}
+                />
+
+                <Text style={styles.label}>Start Date (YYYY-MM-DD)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor="#9ca3af"
+                  value={sessionData.startDate}
+                  onChangeText={(val) => setSessionData({ ...sessionData, startDate: val })}
+                />
+
                 <Text style={styles.label}>Recurring Days</Text>
                 <View style={styles.daysContainer}>
                   {daysOfWeek.map(day => (
@@ -542,24 +549,13 @@ const CoachCreateSessionPage = () => {
             {/* Monthly: Calendar Multi-Select */}
             {recurringType === 'monthly' && (
               <>
-                <Text style={styles.label}>Pick Dates</Text>
+                <Text style={styles.label}>Pick Dates (One Month Only)</Text>
                 <View style={styles.calendarCard}>
                   <View style={styles.monthNav}>
-                    <TouchableOpacity
-                      onPress={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1))}
-                      style={styles.monthNavBtn}
-                    >
-                      <ChevronLeft size={20} color="#9ca3af" />
-                    </TouchableOpacity>
+                    {/* Remove left/right month navigation buttons for monthly recurring */}
                     <Text style={styles.monthLabel}>
                       {monthNames[calendarMonth.getMonth()]} {calendarMonth.getFullYear()}
                     </Text>
-                    <TouchableOpacity
-                      onPress={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1))}
-                      style={styles.monthNavBtn}
-                    >
-                      <ChevronRight size={20} color="#9ca3af" />
-                    </TouchableOpacity>
                   </View>
                   <View style={styles.daysOfWeekRow}>
                     {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
@@ -588,8 +584,13 @@ const CoachCreateSessionPage = () => {
         placeholder="Enter postal code"
         placeholderTextColor="#9ca3af"
         value={sessionData.location}
-        onChangeText={(val) => setSessionData({ ...sessionData, location: val })}
+        onChangeText={(val) => {
+          // Limit to 6 characters
+          const limitedVal = val.slice(0, 6);
+          setSessionData({ ...sessionData, location: limitedVal });
+        }}
         keyboardType="numeric"
+        maxLength={6}
       />
 
       {/* Group Type */}
@@ -619,39 +620,32 @@ const CoachCreateSessionPage = () => {
         </TouchableOpacity>
       </View>
 
-      {/* Max Students */}
+      {/* Max Students Slider */}
       {sessionData.groupType === 'group' && (
         <>
-          <Text style={styles.label}>Maximum students</Text>
-          <TouchableOpacity
-            style={styles.dropdownButton}
-            onPress={() => setShowStudentDropdown(true)}
-          >
-            <Text style={sessionData.maxStudents ? styles.dropdownText : styles.dropdownPlaceholder}>
-              {sessionData.maxStudents || 'Select max students'}
-            </Text>
-            <ChevronDown size={20} color="#9ca3af" />
-          </TouchableOpacity>
-          <Modal visible={showStudentDropdown} transparent animationType="fade">
-            <TouchableOpacity style={styles.modalOverlay} onPress={() => setShowStudentDropdown(false)}>
-              <View style={styles.dropdownModal}>
-                <ScrollView>
-                  {[2, 4, 6, 8, 10, 12, 15, 20].map(num => (
-                    <TouchableOpacity
-                      key={num}
-                      style={styles.dropdownOption}
-                      onPress={() => {
-                        setSessionData({ ...sessionData, maxStudents: num.toString() });
-                        setShowStudentDropdown(false);
-                      }}
-                    >
-                      <Text style={styles.dropdownText}>{num} students</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-            </TouchableOpacity>
-          </Modal>
+          <Text style={styles.label}>Maximum students: {maxStudentsValue}</Text>
+          <View style={styles.sliderContainer}>
+            <MultiSlider
+              values={[maxStudentsValue]}
+              min={2}
+              max={20}
+              step={1}
+              sliderLength={width - 80}
+              onValuesChange={([value]) => setMaxStudentsValue(value)}
+              selectedStyle={{ backgroundColor: '#fb923c' }}
+              unselectedStyle={{ backgroundColor: '#374151' }}
+              containerStyle={{ height: 40 }}
+              trackStyle={{ height: 4, borderRadius: 2 }}
+              markerStyle={{
+                backgroundColor: '#fb923c',
+                height: 20,
+                width: 20,
+                borderRadius: 10,
+                borderWidth: 2,
+                borderColor: '#fff'
+              }}
+            />
+          </View>
         </>
       )}
     </View>
@@ -722,10 +716,8 @@ const CoachCreateSessionPage = () => {
       } else if (sessionData.sessionType === 'single') {
         canProceedResult = (sessionData.monthlyDates && sessionData.monthlyDates.length === 1);
       } else if (sessionData.sessionType === 'recurring') {
-        if (!repeatCount || repeatCount === '') {
-          canProceedResult = false;
-        } else if (recurringType === 'weekly') {
-          canProceedResult = (sessionData.recurringDays && sessionData.recurringDays.length > 0);
+        if (recurringType === 'weekly') {
+          canProceedResult = !!(sessionData.numberOfWeeks && sessionData.startDate && sessionData.recurringDays && sessionData.recurringDays.length > 0);
         } else if (recurringType === 'monthly') {
           canProceedResult = (sessionData.monthlyDates && sessionData.monthlyDates.length > 0);
         }
@@ -742,7 +734,8 @@ const CoachCreateSessionPage = () => {
       startTime: sessionData.startTime,
       endTime: sessionData.endTime,
       monthlyDates: sessionData.monthlyDates,
-      repeatCount,
+      numberOfWeeks: sessionData.numberOfWeeks,
+      startDate: sessionData.startDate,
       recurringDays: sessionData.recurringDays,
       location: sessionData.location,
       groupType: sessionData.groupType
@@ -1044,9 +1037,13 @@ const styles = StyleSheet.create({
   calendarCard: {
     backgroundColor: '#27272a',
     borderRadius: 12,
-    padding: 16,
+    paddingVertical: 24, // increase vertical padding
+    paddingHorizontal: 32, // increase horizontal padding
     marginVertical: 16,
-  },
+    width: gridWidth + 40, // increase width for a larger backing
+    // alignSelf: 'center',
+    // marginHorizontal: 'auto',
+},
   monthNav: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1077,26 +1074,34 @@ const styles = StyleSheet.create({
   calendarGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'flex-start',
+    width: '100%', // fill the card
+    minHeight: 240,
   },
   calendarEmptyCell: {
-    width: (width - 64) / 7,
+    flex: 1, // take up 1/7th of the row
     height: 40,
-  },
+    padding: 6,
+    paddingHorizontal: 10,
+    maxWidth: 48,
+},
   calendarDay: {
-    width: (width - 64) / 7,
+    flex: 1, // take up 1/7th of the row
     height: 40,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 4,
-  },
+    padding: 6,
+    paddingHorizontal: 10,
+    maxWidth: 48, // prevent cells from getting too wide
+},
   calendarDaySelected: {
     backgroundColor: '#fb923c',
   },
   calendarDayText: {
     fontSize: 14,
     fontWeight: '600',
+    color: '#9ca3af',
   },
   summaryCard: {
     backgroundColor: '#27272a',
@@ -1201,6 +1206,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#27272a',
     borderTopWidth: 1,
     borderTopColor: '#374151',
+  },
+  timeSliderContainer: {
+    paddingVertical: 20,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  timeLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginTop: 10,
+  },
+  timeLabel: {
+    color: '#9ca3af',
+    fontSize: 12,
   },
 });
 

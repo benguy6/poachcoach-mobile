@@ -1,4 +1,5 @@
-export const BACKEND_URL = "http://192.168.1.14:3000"; // Update as needed
+import axios from 'axios';
+export const BACKEND_URL = "http://192.168.1.17:3000"; // Update as needed
 
 async function post(endpoint: string, body: any) {
   const url = `${BACKEND_URL}${endpoint}`;
@@ -151,6 +152,36 @@ export const createCoachSession = async (token: string, sessionData: any) => {
   });
   if (!res.ok) throw new Error('Failed to create session');
   return res.json();
+};
+
+import { getToken } from './auth';
+
+export const uploadProfilePicture = async (uri: string) => {
+  const token = await getToken();
+  if (!token) throw new Error('No token found');
+
+  const formData = new FormData();
+  formData.append('file', {
+    uri,
+    name: 'profile.jpg',
+    type: 'image/jpeg', // or 'image/png' if needed
+  } as any);
+
+  const res = await fetch(`${BACKEND_URL}/api/uploadProfilePicture`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      // DO NOT set Content-Type here!
+    },
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(errorText || 'Failed to upload');
+  }
+  const data = await res.json();
+  return data.url; // The new image URL
 };
 
 

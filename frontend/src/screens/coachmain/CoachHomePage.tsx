@@ -14,6 +14,7 @@ import { getCoachDashboard } from '../../services/api';
 import { supabase } from '../../services/supabase';
 
 import type { StackNavigationProp } from '@react-navigation/stack';
+import CoachProfilePage from './CoachProfilePage';
 
 type CoachHomePageProps = {
   navigation: StackNavigationProp<any>;
@@ -66,14 +67,17 @@ const CoachHomePage = ({ navigation }: CoachHomePageProps) => {
 
         {/* Greeting */}
         <View style={styles.greetingContainer}>
-          <Image
-            source={{ uri: coach?.profilePicture || 'https://randomuser.me/api/portraits/men/32.jpg' }}
-            style={styles.profileImage}
-          />
-          <View style={styles.greetingTextContainer}>
-            <Text style={styles.greetingText}>Hello, {coach?.name || 'Coach'}!</Text>
-            <Text style={styles.subGreetingText}>Ready to inspire your students?</Text>
-          </View>
+          <TouchableOpacity onPress={() => navigation.navigate('CoachProfile')} style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+            <Image
+              source={{ uri: coach?.profilePicture || 'https://randomuser.me/api/portraits/men/32.jpg' }}
+              style={styles.profileImage}
+            />
+            <View style={styles.greetingTextContainer}>
+              <Text style={styles.greetingText}>Hello, {coach?.name || 'Coach'}!</Text>
+              <Text style={styles.subGreetingText}>Ready to inspire your students?</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#fed7aa" style={{ marginLeft: 8 }} />
+          </TouchableOpacity>
         </View>
 
         {/* Upcoming Classes */}

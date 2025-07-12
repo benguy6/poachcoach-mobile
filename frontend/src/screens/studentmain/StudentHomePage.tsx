@@ -14,6 +14,8 @@ import BottomNavigation from '../../components/BottomNavigation';
 import { BACKEND_URL } from '../../services/api'; 
 import { studentTabs } from '../../constants/studentTabs';
 import { supabase } from '../../services/supabase';
+import { getStudentDashboard } from '../../services/api';
+import { useFocusEffect } from '@react-navigation/native';
 
 interface Chat {
   id: number;
@@ -31,30 +33,42 @@ interface HomePageProps {
 const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
   const [notifications] = useState(2);
   const [activeTab, setActiveTab] = useState('home');
-  const [firstName, setFirstName] = useState(''); // <-- Add this
+  const [firstName, setFirstName] = useState('');
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [profilePicture, setProfilePicture] = useState<string | undefined>(undefined);
 
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const { data: sessionData, error } = await supabase.auth.getSession();
-        console.log('Session Data:', sessionData); // <-- Add this line
+  useFocusEffect(
+    React.useCallback(() => {
+      let timeout: NodeJS.Timeout;
+      const fetchDashboard = async () => {
+        try {
+          const { data: sessionData, error } = await supabase.auth.getSession();
+          const accessToken = sessionData.session?.access_token;
+          if (!accessToken) throw new Error('No access token found');
 
-        const accessToken = sessionData.session?.access_token;
-        if (!accessToken) throw new Error('No access token found');
-
-        const response = await fetch(`${BACKEND_URL}/api/user/me`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-
-        const dataJson = await response.json();
-        setFirstName(dataJson.first_name);
-      } catch (error) {
-        console.error('Failed to fetch user info', error);
-      }
-    };
-
-    fetchUser();
-  }, []);
+          // Wait 500ms before fetching, to allow backend to update
+          timeout = setTimeout(async () => {
+            const dashboard = await getStudentDashboard(accessToken);
+            setFirstName(dashboard.user?.name || '');
+            setSessions(dashboard.sessions || []);
+            setProfilePicture(prev => {
+              if (dashboard.user?.profile_picture && dashboard.user?.profile_picture !== prev) {
+                return dashboard.user?.profile_picture;
+              }
+              return prev;
+            });
+          }, 500);
+        } catch (error) {
+          console.error('Failed to fetch dashboard info', error);
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchDashboard();
+      return () => clearTimeout(timeout);
+    }, [])
+  );
 
   const chats: Chat[] = [
     {
@@ -89,7 +103,9 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
   };
 
   const handleProfilePress = () => {
-    navigation.navigate('StudentProfile');
+    navigation.navigate('StudentProfile', {
+      onProfilePicChange: (newUrl: string) => setProfilePicture(newUrl),
+    });
   };
 
   return (
@@ -125,10 +141,16 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
         {/* Profile Section */}
         <TouchableOpacity style={styles.profileSection} onPress={handleProfilePress}>
           <View style={styles.profileContainer}>
-            <Image
-              source={{ uri: 'https://randomuser.me/api/portraits/men/1.jpg' }}
-              style={styles.profileImage}
-            />
+            {profilePicture ? (
+              <Image
+                source={{ uri: profilePicture }}
+                style={styles.profileImage}
+              />
+            ) : (
+              <View style={[styles.profileImage, { backgroundColor: '#eee', justifyContent: 'center', alignItems: 'center' }]}>
+                <Ionicons name="person" size={24} color="#ccc" />
+              </View>
+            )}
             <View style={styles.profileText}>
               <Text style={styles.greeting}>Hello, {firstName || 'Student'}!</Text>
               <Text style={styles.subGreeting}>Ready for your next session?</Text>
@@ -142,52 +164,69 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
           {/* Upcoming Class Card */}
           <View style={styles.upcomingCard}>
             <Text style={styles.upcomingTitle}>Upcoming Class</Text>
-            
-            {/* Confirmation Banner */}
-            <View style={styles.confirmationBanner}>
-              <View style={styles.checkIcon}>
-                <Ionicons name="checkmark" size={16} color="white" />
-              </View>
-              <View style={styles.confirmationText}>
-                <Text style={styles.confirmationTitle}>Your class is confirmed!</Text>
-                <Text style={styles.confirmationSubtitle}>Yoga Basics with Sarah Johnson</Text>
-              </View>
-            </View>
-
-            {/* Class Details */}
-            <View style={styles.classDetails}>
-              <View style={styles.classHeader}>
-                <Text style={styles.className}>Yoga Basics</Text>
-                <View style={styles.todayBadge}>
-                  <Text style={styles.todayText}>Today</Text>
-                </View>
-              </View>
-              <Text style={styles.instructorName}>With Sarah Johnson</Text>
-              
-              <View style={styles.classInfo}>
-                <View style={styles.infoRow}>
-                  <Ionicons name="time-outline" size={16} color="#6b7280" />
-                  <Text style={styles.infoText}>10:00 AM - 11:00 AM</Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <Ionicons name="location-outline" size={16} color="#6b7280" />
-                  <Text style={styles.infoText}>Wellness Studio, 123 Main Street</Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <Ionicons name="people-outline" size={16} color="#6b7280" />
-                  <Text style={styles.infoText}>15 people attending</Text>
-                </View>
-              </View>
-
-              <View style={styles.buttonRow}>
-                <TouchableOpacity style={styles.viewDetailsButton}>
-                  <Text style={styles.viewDetailsText}>View Details</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.cancelButton}>
-                  <Text style={styles.cancelText}>Cancel Class</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+            {loading ? (
+              <Text style={{ padding: 16 }}>Loading...</Text>
+            ) : sessions.length > 0 ? (
+              (() => {
+                const session = sessions[0];
+                const startTime = new Date(session.start_time);
+                const endTime = new Date(session.end_time);
+                const today = new Date();
+                const isToday = startTime.toDateString() === today.toDateString();
+                return (
+                  <>
+                    {/* Confirmation Banner */}
+                    <View style={styles.confirmationBanner}>
+                      <View style={styles.checkIcon}>
+                        <Ionicons name="checkmark" size={16} color="white" />
+                      </View>
+                      <View style={styles.confirmationText}>
+                        <Text style={styles.confirmationTitle}>Your class is confirmed!</Text>
+                        <Text style={styles.confirmationSubtitle}>{session.session_name || 'Session'} with {session.coach_name || 'Coach'}</Text>
+                      </View>
+                    </View>
+                    {/* Class Details */}
+                    <View style={styles.classDetails}>
+                      <View style={styles.classHeader}>
+                        <Text style={styles.className}>{session.session_name || 'Session'}</Text>
+                        {isToday && (
+                          <View style={styles.todayBadge}>
+                            <Text style={styles.todayText}>Today</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.instructorName}>With {session.coach_name || 'Coach'}</Text>
+                      <View style={styles.classInfo}>
+                        <View style={styles.infoRow}>
+                          <Ionicons name="time-outline" size={16} color="#6b7280" />
+                          <Text style={styles.infoText}>
+                            {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </Text>
+                        </View>
+                        <View style={styles.infoRow}>
+                          <Ionicons name="location-outline" size={16} color="#6b7280" />
+                          <Text style={styles.infoText}>{session.location || 'TBD'}</Text>
+                        </View>
+                        <View style={styles.infoRow}>
+                          <Ionicons name="people-outline" size={16} color="#6b7280" />
+                          <Text style={styles.infoText}>{session.students_attending || 1} people attending</Text>
+                        </View>
+                      </View>
+                      <View style={styles.buttonRow}>
+                        <TouchableOpacity style={styles.viewDetailsButton}>
+                          <Text style={styles.viewDetailsText}>View Details</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.cancelButton}>
+                          <Text style={styles.cancelText}>Cancel Class</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </>
+                );
+              })()
+            ) : (
+              <Text style={{ padding: 16, color: '#6b7280' }}>No upcoming classes. Book your next session!</Text>
+            )}
           </View>
 
           {/* Recent Messages Card */}

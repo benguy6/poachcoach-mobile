@@ -24,7 +24,7 @@ app.use('/api/coach/dashboard', coachDashboardRouter);
 app.use('/api/coach/session', coachSessionRouter);
 app.use('/api/find-coach', findCoachRouter);
 app.use('/api/student/dashboard', studentDashboardRouter);
-app.use('/api/upload-profile-picture', uploadProfilePictureRouter);
+app.use('/api/uploadProfilePicture', uploadProfilePictureRouter);
 
 app.get('/', (_req, res) => {
   res.send('Server is running');

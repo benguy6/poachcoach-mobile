@@ -41,6 +41,7 @@ import {
   CoachSettingPage,
   CoachNotificationsPage,
   CoachChatPage,
+  CoachProfilePage,
 } from "./screens/coachmain";
 
 // Navigation Types
@@ -96,6 +97,7 @@ export type CoachMainStackParamList = {
   CoachTabs: undefined;
   CoachNotifications: undefined;
   CoachSettings: undefined;
+  CoachProfile: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -309,6 +311,7 @@ const CoachMainApp = () => {
       <CoachMainStack.Screen name="CoachTabs" component={CoachTabs} />
       <CoachMainStack.Screen name="CoachNotifications" component={CoachNotificationsPage} />
       <CoachMainStack.Screen name="CoachSettings" component={CoachSettingsWrapper} />
+      <CoachMainStack.Screen name="CoachProfile" component={CoachProfilePage} />
     </CoachMainStack.Navigator>
   );
 };
