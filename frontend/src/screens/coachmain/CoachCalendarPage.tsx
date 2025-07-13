@@ -36,6 +36,7 @@ const CoachCalendarPage = ({ navigation }: CoachCalendarPageProps) => {
   const [activeTab, setActiveTab] = useState('calendar');
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [classToCancel, setClassToCancel] = useState<ClassItem | null>(null);
+  const [expandedClassIndex, setExpandedClassIndex] = useState<number | null>(null);
 
   const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
   const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
@@ -105,7 +106,20 @@ const CoachCalendarPage = ({ navigation }: CoachCalendarPageProps) => {
         </TouchableOpacity>
       );
     }
-    return days;
+    // Fill the rest of the grid with empty cells if needed
+    while (days.length % 7 !== 0) {
+      days.push(<View key={`empty-end-${days.length}`} style={styles.calendarEmptyCell} />);
+    }
+    // Chunk into rows of 7
+    const rows = [];
+    for (let i = 0; i < days.length; i += 7) {
+      rows.push(
+        <View key={`row-${i / 7}`} style={{ flexDirection: 'row' }}>
+          {days.slice(i, i + 7)}
+        </View>
+      );
+    }
+    return rows;
   };
 
   const handleCancelClass = (classItem: ClassItem) => {
@@ -164,47 +178,72 @@ const CoachCalendarPage = ({ navigation }: CoachCalendarPageProps) => {
         {/* Classes for Selected Date */}
         <View style={styles.classesCard}>
           <Text style={styles.classesTitle}>
-            Classes on June {selectedDate}, 2025
+            Classes on {monthNames[currentDate.getMonth()]} {selectedDate}, {currentDate.getFullYear()}
           </Text>
           {classSchedule[selectedDate] ? (
             <View>
-              {classSchedule[selectedDate].map((classItem, index) => (
-                <View key={index} style={styles.classItemCard}>
-                  <View style={styles.classItemHeader}>
+              {classSchedule[selectedDate].map((classItem, index) => {
+                const isExpanded = expandedClassIndex === index;
+                // Placeholder students array
+                const studentsList = Array.from({ length: classItem.students }, (_, i) => `Student ${i + 1}`);
+                return (
+                  <View key={index} style={styles.classItemCard}>
+                    {/* Always show title */}
                     <Text style={styles.classItemTitle}>{classItem.title}</Text>
-                    <TouchableOpacity
-                      onPress={() => handleCancelClass(classItem)}
-                      style={styles.cancelIconBtn}
-                    >
-                      <Trash2 size={18} color="#ef4444" />
-                    </TouchableOpacity>
-                  </View>
-                  <View style={styles.classItemInfoRow}>
-                    <Clock size={16} color="#9ca3af" />
-                    <Text style={styles.classItemInfoText}>{classItem.time}</Text>
-                  </View>
-                  <View style={styles.classItemInfoRow}>
-                    <Users size={16} color="#9ca3af" />
-                    <Text style={styles.classItemInfoText}>
-                      {classItem.students} student{classItem.students !== 1 ? 's' : ''} enrolled
-                    </Text>
-                  </View>
-                  {classItem.location && (
+                    {/* Minimal info row */}
                     <View style={styles.classItemInfoRow}>
-                      <MapPin size={16} color="#fb923c" />
-                      <Text style={styles.classItemInfoText}>{classItem.location}</Text>
+                      <Clock size={16} color="#9ca3af" />
+                      <Text style={styles.classItemInfoText}>{classItem.time}</Text>
                     </View>
-                  )}
-                  <View style={styles.classItemBtnRow}>
-                    <TouchableOpacity style={[styles.classActionBtn, styles.classActionBtnOrange]}>
-                      <Text style={styles.classActionBtnText}>View Details</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.classActionBtn, styles.classActionBtnGray]}>
-                      <Text style={styles.classActionBtnText}>Edit</Text>
-                    </TouchableOpacity>
+                    {classItem.location && (
+                      <View style={styles.classItemInfoRow}>
+                        <MapPin size={16} color="#fb923c" />
+                        <Text style={styles.classItemInfoText}>{classItem.location}</Text>
+                      </View>
+                    )}
+                    <View style={styles.classItemInfoRow}>
+                      <Users size={16} color="#9ca3af" />
+                      <Text style={styles.classItemInfoText}>Coach John Doe</Text>
+                    </View>
+                    {/* View Details Button */}
+                    <View style={styles.classItemBtnRow}>
+                      <TouchableOpacity
+                        style={[styles.classActionBtn, styles.classActionBtnOrange]}
+                        onPress={() => setExpandedClassIndex(isExpanded ? null : index)}
+                      >
+                        <Text style={styles.classActionBtnText}>{isExpanded ? 'Hide Details' : 'View Details'}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.classActionBtn, styles.classActionBtnRed]}
+                        onPress={() => handleCancelClass(classItem)}
+                      >
+                        <Text style={styles.classActionBtnText}>Cancel Class</Text>
+                      </TouchableOpacity>
+                    </View>
+                    {/* Expanded details */}
+                    {isExpanded && (
+                      <View style={{ marginTop: 10 }}>
+                        <View style={styles.classItemInfoRow}>
+                          <Text style={styles.classItemInfoText}>
+                            Session Type: {classItem.students > 1 ? 'Group Session' : 'Individual Session'}
+                          </Text>
+                        </View>
+                        <View style={styles.classItemInfoRow}>
+                          <Text style={styles.classItemInfoText}>
+                            Number of Students: {classItem.students}
+                          </Text>
+                        </View>
+                        <View style={{ marginTop: 8 }}>
+                          <Text style={[styles.classItemInfoText, { fontWeight: 'bold', marginBottom: 4 }]}>Students Attending:</Text>
+                          {studentsList.map((student, idx) => (
+                            <Text key={idx} style={styles.classItemInfoText}>{student}</Text>
+                          ))}
+                        </View>
+                      </View>
+                    )}
                   </View>
-                </View>
-              ))}
+                );
+              })}
             </View>
           ) : (
             <View style={styles.noClassView}>
@@ -260,7 +299,12 @@ const CoachCalendarPage = ({ navigation }: CoachCalendarPageProps) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#18181b' },
+  container: {
+    flex: 1,
+    backgroundColor: '#18181b',
+    paddingTop: 32,
+    paddingBottom: 32,
+  },
   header: {
     backgroundColor: '#27272a',
     paddingVertical: 18,
@@ -414,6 +458,9 @@ const styles = StyleSheet.create({
   },
   classActionBtnGray: {
     backgroundColor: '#374151',
+  },
+  classActionBtnRed: {
+    backgroundColor: '#ef4444',
   },
   classActionBtnText: {
     color: '#fff',

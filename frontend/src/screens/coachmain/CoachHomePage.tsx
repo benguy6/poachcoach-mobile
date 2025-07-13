@@ -26,6 +26,11 @@ const CoachHomePage = ({ navigation }: CoachHomePageProps) => {
   const [sessions, setSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Handle profile picture change
+  const handleProfilePicChange = (newUrl: string) => {
+    setCoach((prev: any) => ({ ...prev, profilePicture: newUrl }));
+  };
+
   useEffect(() => {
     const fetchDashboard = async () => {
       setLoading(true);
@@ -67,7 +72,10 @@ const CoachHomePage = ({ navigation }: CoachHomePageProps) => {
 
         {/* Greeting */}
         <View style={styles.greetingContainer}>
-          <TouchableOpacity onPress={() => navigation.navigate('CoachProfile')} style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('CoachProfile', { onProfilePicChange: handleProfilePicChange })}
+            style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
+          >
             <Image
               source={{ uri: coach?.profilePicture || 'https://randomuser.me/api/portraits/men/32.jpg' }}
               style={styles.profileImage}

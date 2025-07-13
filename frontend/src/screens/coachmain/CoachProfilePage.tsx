@@ -21,12 +21,7 @@ import {
   Settings,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
-
-// Dummy upload function for coach profile picture
-const uploadCoachProfilePicture = async (uri: string) => {
-  // Simulate upload delay
-  return new Promise<string>((resolve) => setTimeout(() => resolve(uri), 1000));
-};
+import { uploadProfilePicture } from '../../services/api';
 
 const dummyCoachProfile = {
   name: 'Coach Alex Smith',
@@ -48,6 +43,10 @@ const dummyAchievements = [
   { id: 3, icon: '🎖️', title: '100+ Classes', date: '2021' },
 ];
 
+type CoachProfilePageProps = {
+  onProfilePicChange?: (url: string) => void;
+};
+
 const CoachProfilePage: React.FC = () => {
   const [profilePic, setProfilePic] = React.useState(dummyCoachProfile.profilePicture);
 
@@ -60,7 +59,7 @@ const CoachProfilePage: React.FC = () => {
     });
     if (!result.canceled && result.assets && result.assets.length > 0) {
       try {
-        const uploadedUrl = await uploadCoachProfilePicture(result.assets[0].uri);
+        const uploadedUrl = await uploadProfilePicture(result.assets[0].uri);
         setProfilePic(uploadedUrl);
       } catch (e) {
         console.error('Upload error:', e);

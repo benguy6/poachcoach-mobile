@@ -27,6 +27,7 @@ import {
   ChevronRight,
   Map,
 } from 'lucide-react-native';
+import { useMemo } from 'react';
 
 const { width } = Dimensions.get('window');
 const gridWidth = width - 64;
@@ -68,21 +69,90 @@ const existingSessions = [
   { date: '2025-06-25', time: '09:00', title: 'Swimming Lessons' },
 ];
 
-const today = new Date();
-const currentMonth = today.getMonth();
-const currentYear = today.getFullYear();
+// Helper to check if a session exists on a given date
+const hasSession = (dateStr: string) => {
+  return existingSessions.some(s => s.date === dateStr);
+};
 
-const getSessionsForMonth = (month: number, year: number) =>
-  existingSessions.filter(
-    (s) =>
-      new Date(s.date).getMonth() === month &&
-      new Date(s.date).getFullYear() === year
+// Get sessions for a specific date
+const getSessionsForDate = (dateStr: string) => {
+  return existingSessions.filter(s => s.date === dateStr);
+};
+
+// Render the calendar for the current month
+const renderCurrentMonthCalendar = (selectedDay: string | null, setSelectedDay: (day: string | null) => void) => {
+  const today = new Date();
+  const currentMonth = today.getMonth();
+  const currentYear = today.getFullYear();
+
+  // Helper to get days in month and first day
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay();
+
+  const days = [];
+  // Add empty cells for days before the first day of the month
+  for (let i = 0; i < firstDayOfMonth; i++) {
+    days.push({ type: 'empty', key: `empty-${i}` });
+  }
+  // Add cells for each day of the month
+  for (let day = 1; day <= daysInMonth; day++) {
+    days.push({ type: 'day', day, key: `day-${day}` });
+  }
+  // Add empty cells to complete the grid (always 6 rows)
+  while (days.length < 42) {
+    days.push({ type: 'empty', key: `empty-end-${days.length}` });
+  }
+  // Split into 6 rows of 7 cells
+  const rows = [];
+  for (let i = 0; i < 6; i++) {
+    rows.push(days.slice(i * 7, (i + 1) * 7));
+  }
+  return (
+    <View>
+      {rows.map((row, rowIndex) => (
+        <View key={`row-${rowIndex}`} style={{ flexDirection: 'row' }}>
+          {row.map(cell => {
+            if (cell.type === 'empty') {
+              return <View key={cell.key} style={styles.calendarEmptyCell} />;
+            } else {
+              const day = cell.day;
+              const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+              const isSelected = selectedDay === dateStr;
+              return (
+                <TouchableOpacity
+                  key={cell.key}
+                  onPress={() => setSelectedDay(dateStr)}
+                  style={[
+                    styles.calendarDay,
+                    isSelected && styles.calendarDaySelected,
+                  ]}
+                >
+                  <View style={{ alignItems: 'center' }}>
+                    <Text style={[
+                      styles.calendarDayText,
+                      isSelected ? { color: '#fff' } : { color: '#9ca3af' }
+                    ]}>
+                      {day}
+                    </Text>
+                    {hasSession(dateStr) && (
+                      <View style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: 3,
+                        backgroundColor: '#fb923c',
+                        marginTop: 2,
+                      }} />
+                    )}
+                  </View>
+                </TouchableOpacity>
+              );
+            }
+          })}
+        </View>
+      ))}
+    </View>
   );
-
-const monthNames = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'
-];
+};
 
 const CoachCreateSessionPage = () => {
   const navigation = useNavigation();
@@ -130,12 +200,13 @@ const CoachCreateSessionPage = () => {
   const [showCalendar, setShowCalendar] = useState(false);
   const [showInlineCalendar, setShowInlineCalendar] = useState(false);
   const [clashError, setClashError] = useState<string | null>(null);
-  const [calendarMonth, setCalendarMonth] = useState(new Date(currentYear, currentMonth, 1));
+  // Remove calendarMonth state, renderStaticCalendar, and all calendar-related UI and logic
   const [recurringType, setRecurringType] = useState<string>('weekly');
 
   // Time slider states
   const [timeRange, setTimeRange] = useState([0, 1]);
   const [maxStudentsValue, setMaxStudentsValue] = useState(2);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -252,14 +323,14 @@ const CoachCreateSessionPage = () => {
   }, [maxStudentsValue]);
 
   // Helper to get days in month and first day
-  const daysInMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0).getDate();
-  const firstDayOfMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1).getDay();
+  const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+  const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getDay();
   
   // Calculate total cells needed to ensure full weeks are shown (always 6 rows)
   const totalCells = 42; // 6 rows × 7 days = 42 cells
 
   const handleCalendarDayPress = (day: number) => {
-    const dateStr = `${calendarMonth.getFullYear()}-${String(calendarMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const dateStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     toggleDate(dateStr);
   };
 
@@ -291,8 +362,10 @@ const CoachCreateSessionPage = () => {
             return <View key={cell.key} style={styles.calendarEmptyCell} />;
           } else {
             const day = cell.day;
-            const dateStr = `${calendarMonth.getFullYear()}-${String(calendarMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const dateStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             const isSelected = (sessionData.monthlyDates && sessionData.monthlyDates.includes(dateStr));
+            // Debug output
+            console.log('Rendering day:', day, typeof day);
             return (
               <TouchableOpacity
                 key={cell.key}
@@ -302,12 +375,20 @@ const CoachCreateSessionPage = () => {
                   isSelected && styles.calendarDaySelected,
                 ]}
               >
-                <Text style={[
-                  styles.calendarDayText,
-                  isSelected ? { color: '#fff' } : { color: '#9ca3af' }
-                ]}>
-                  {day}
-                </Text>
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={{ color: 'red', fontSize: 16 }}>
+                    {typeof day === 'number' ? String(day) : '?'}
+                  </Text>
+                  {hasSession(dateStr) && (
+                    <View style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: 3,
+                      backgroundColor: '#fb923c',
+                      marginTop: 2,
+                    }} />
+                  )}
+                </View>
               </TouchableOpacity>
             );
           }
@@ -409,6 +490,8 @@ const CoachCreateSessionPage = () => {
 
   // Step 2: Schedule
   const renderStep2 = () => {
+    const today = new Date();
+    const currentYear = today.getFullYear();
     return (
       <View style={styles.stepContainer}>
         <Text style={styles.stepTitle}>Schedule</Text>
@@ -446,32 +529,32 @@ const CoachCreateSessionPage = () => {
         {/* Single Class: Date Selection */}
         {sessionData.sessionType === 'single' && (
           <>
-            <Text style={styles.label}>Pick Date</Text>
-            <View style={styles.calendarCard}>
-              <View style={styles.monthNav}>
-                <TouchableOpacity
-                  onPress={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1))}
-                  style={styles.monthNavBtn}
-                >
-                  <ChevronLeft size={20} color="#9ca3af" />
-                </TouchableOpacity>
-                <Text style={styles.monthLabel}>
-                  {monthNames[calendarMonth.getMonth()]} {calendarMonth.getFullYear()}
-                </Text>
-                <TouchableOpacity
-                  onPress={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1))}
-                  style={styles.monthNavBtn}
-                >
-                  <ChevronRight size={20} color="#9ca3af" />
-                </TouchableOpacity>
-              </View>
-              <View style={styles.daysOfWeekRow}>
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                  <Text key={day} style={styles.dayOfWeekText}>{day}</Text>
-                ))}
-              </View>
-              <View style={styles.calendarGrid}>{renderStaticCalendar()}</View>
-            </View>
+            <Text style={styles.label}>Pick Date (YYYY-MM-DD)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor="#9ca3af"
+              value={sessionData.monthlyDates && sessionData.monthlyDates[0] ? sessionData.monthlyDates[0] : ''}
+              onChangeText={val => {
+                // Only allow one date for single session
+                setSessionData(prev => ({ ...prev, monthlyDates: [val] }));
+              }}
+            />
+            {/* Show sessions for entered date if any */}
+            {sessionData.monthlyDates && sessionData.monthlyDates[0] && (
+              existingSessions.some(s => s.date === sessionData.monthlyDates[0]) ? (
+                <View style={{ marginTop: 16, backgroundColor: '#27272a', borderRadius: 10, padding: 12 }}>
+                  <Text style={{ color: '#fff', fontWeight: 'bold', marginBottom: 8 }}>Sessions on {sessionData.monthlyDates[0]}:</Text>
+                  {existingSessions.filter(s => s.date === sessionData.monthlyDates[0]).map((session, idx) => (
+                    <View key={idx} style={{ marginBottom: 6 }}>
+                      <Text style={{ color: '#fb923c', fontWeight: 'bold' }}>{session.title}</Text>
+                      <Text style={{ color: '#fff' }}>{session.time}</Text>
+                    </View>
+                  ))}
+                  <Text style={{ color: 'red', marginTop: 8 }}>Warning: There are already sessions booked on this date.</Text>
+                </View>
+              ) : null
+            )}
           </>
         )}
 
@@ -550,19 +633,8 @@ const CoachCreateSessionPage = () => {
             {recurringType === 'monthly' && (
               <>
                 <Text style={styles.label}>Pick Dates (One Month Only)</Text>
-                <View style={styles.calendarCard}>
-                  <View style={styles.monthNav}>
-                    {/* Remove left/right month navigation buttons for monthly recurring */}
-                    <Text style={styles.monthLabel}>
-                      {monthNames[calendarMonth.getMonth()]} {calendarMonth.getFullYear()}
-                    </Text>
-                  </View>
-                  <View style={styles.daysOfWeekRow}>
-                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                      <Text key={day} style={styles.dayOfWeekText}>{day}</Text>
-                    ))}
-                  </View>
-                  <View style={styles.calendarGrid}>{renderStaticCalendar()}</View>
+                <View style={{height: 100, justifyContent: 'center', alignItems: 'center'}}>
+                  <Text style={{color: '#9ca3af'}}>Monthly calendar selection will be available in a future update.</Text>
                 </View>
               </>
             )}
