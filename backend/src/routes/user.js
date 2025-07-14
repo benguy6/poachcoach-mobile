@@ -1,10 +1,34 @@
 const express = require('express');
-const bcrypt = require('bcryptjs'); 
+const axios = require('axios');
+const bcrypt = require('bcryptjs');
 const { supabase } = require('../supabaseClient');
 const { verifySupabaseToken } = require('../middleware/authMiddleware');
-const { getGeoFromPostal } = require('../utils/geocode');
 
 const router = express.Router();
+
+const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
+
+const getGeoFromPostalCode = async (postalCode) => {
+  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${postalCode},Singapore&key=${GOOGLE_MAPS_API_KEY}`;
+  console.log(`Sending request to Google Maps API: ${url}`);
+  try {
+    const response = await axios.get(url);
+    console.log('Raw response:', response.data);
+    const results = response.data.results;
+    if (results.length > 0) {
+      const formattedAddress = results[0].formatted_address;
+      const latitude = results[0].geometry.location.lat;
+      const longitude = results[0].geometry.location.lng;
+      return { address: formattedAddress, latitude, longitude };
+    } else {
+      console.warn(`Postal code ${postalCode} not found.`);
+      return { address: 'Address not found', latitude: null, longitude: null };
+    }
+  } catch (error) {
+    console.error('Error fetching address from Google Maps API:', error.message);
+    return { address: 'Address not found', latitude: null, longitude: null };
+  }
+};
 
 const isStrongPassword = (password) => {
   if (typeof password !== 'string') return false;  
@@ -140,8 +164,23 @@ router.post('/signup-coach', async (req, res) => {
   }
 
   try {
-    const { latitude, longitude } = await getGeoFromPostal(postal_code);
+    let address, latitude, longitude;
+    try {
+      const geoData = await getGeoFromPostalCode(postal_code.toString()); // Ensure postal_code is treated as a string
+      address = geoData.address;
+      latitude = geoData.latitude;
+      longitude = geoData.longitude;
 
+      if (!latitude || !longitude) {
+        latitude = 1.290270; // Default latitude for Singapore
+        longitude = 103.851959; // Default longitude for Singapore
+      }
+    } catch (geoError) {
+      console.log('Geolocation failed, using default address:', geoError.message);
+      address = 'Address not found';
+      latitude = 1.290270;
+      longitude = 103.851959;
+    }
 
     const { error: userErr } = await supabase.from('Users').insert([
       {
@@ -153,6 +192,7 @@ router.post('/signup-coach', async (req, res) => {
         gender,
         number,
         postal_code,
+        address, // Store the converted address
         latitude: latitude.toString(),
         longitude: longitude.toString(),
         role: 'coach',
@@ -179,8 +219,8 @@ router.post('/signup-coach', async (req, res) => {
 
     return res.status(201).json({ message: 'Coach registered successfully' });
   } catch (err) {
-    console.error('Geolocation error:', err.message);
-    return res.status(500).json({ error: 'Failed to fetch geolocation from postal code' });
+    console.error('Coach signup error:', err.message);
+    return res.status(500).json({ error: 'Failed to create coach account' });
   }
 });
 
@@ -205,21 +245,40 @@ router.post('/signup-student', async (req, res) => {
   }
 
   try {
-    const { latitude, longitude } = await getGeoFromPostal(postal_code);
+    let address, latitude, longitude;
+    try {
+      const geoData = await getGeoFromPostalCode(postal_code.toString()); // Ensure postal_code is treated as a string
+      address = geoData.address;
+      latitude = geoData.latitude;
+      longitude = geoData.longitude;
 
-    const { error: userErr } = await supabase.from('Users').insert([{
-      id,
-      email,
-      first_name,
-      last_name,
-      age: age.toString(),
-      gender,
-      number,
-      postal_code,
-      latitude: latitude.toString(),
-      longitude: longitude.toString(),
-      role: 'student',
-    }]);
+      if (!latitude || !longitude) {
+        latitude = 1.290270; // Default latitude for Singapore
+        longitude = 103.851959; // Default longitude for Singapore
+      }
+    } catch (geoError) {
+      console.log('Geolocation failed, using default address:', geoError.message);
+      address = 'Address not found';
+      latitude = 1.290270;
+      longitude = 103.851959;
+    }
+
+    const { error: userErr } = await supabase.from('Users').insert([
+      {
+        id,
+        email,
+        first_name,
+        last_name,
+        age: age.toString(),
+        gender,
+        number,
+        postal_code,
+        address, // Store the converted address
+        latitude: latitude.toString(),
+        longitude: longitude.toString(),
+        role: 'student',
+      },
+    ]);
 
     if (userErr) {
       return res.status(500).json({ error: userErr.message });
@@ -232,8 +291,8 @@ router.post('/signup-student', async (req, res) => {
 
     return res.status(201).json({ message: 'Student metadata stored successfully' });
   } catch (err) {
-    console.error('Geolocation failed:', err.message);
-    return res.status(500).json({ error: 'Failed to fetch geolocation from postal code' });
+    console.error('Student signup error:', err.message);
+    return res.status(500).json({ error: 'Failed to create student account' });
   }
 });
 
@@ -292,6 +351,7 @@ router.post('/request-reset-password', async (req, res) => {
     .from('Users')
     .select('id')
     .eq('email', email)
+    .single();
 
   if (userError || !user) {
     return res.status(404).json({ error: 'User not found.' });
@@ -342,7 +402,7 @@ router.get('/me', verifySupabaseToken, async (req, res) => {
     .from('Users')
     .select('*')
     .eq('id', userId)
-    .Single();
+    .single();
 
   if (userError || !user) {
     return res.status(404).json({ error: 'User not found' });
@@ -352,13 +412,13 @@ router.get('/me', verifySupabaseToken, async (req, res) => {
     .from('Coaches')
     .select('id')
     .eq('id', userId)
-    .Single();
+    .maybeSingle();
 
   const { data: student } = await supabase
     .from('Students')
     .select('id')
     .eq('id', userId)
-    .Single();
+    .maybeSingle();
 
   let role = 'unknown';
   if (coach) role = 'coach';

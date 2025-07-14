@@ -17,20 +17,11 @@ router.get('/', verifySupabaseToken, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const { data: student, error: studentError } = await supabase
-      .from('Students')
-      .select('id')
-      .eq('user_id', userId)
-      .single();
-
-    if (studentError || !student) {
-      return res.status(404).json({ error: 'Student record not found' });
-    }
 
     const { data: studentSessions, error: ssError } = await supabase
       .from('Student_sessions')
       .select('session_id')
-      .eq('student_id', student.id)
+      .eq('student_id', userId)
       .eq('student_status', 'paid');
 
     if (ssError) {
@@ -62,7 +53,6 @@ router.get('/', verifySupabaseToken, async (req, res) => {
         email: user.email,
         profilePicture: user.profile_picture,
       },
-      studentProfile: student,
       sessions: sessions,
     });
 
@@ -159,9 +149,3 @@ router.post('/cancel-session', verifySupabaseToken, async (req, res) => {
 
 
 module.exports = router;
-
-
-
-
-
-

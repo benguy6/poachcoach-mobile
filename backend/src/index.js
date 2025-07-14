@@ -17,6 +17,8 @@ const coachSessionRouter = require('./routes/coach_session');
 const findCoachRouter = require('./routes/find_coach');
 const studentDashboardRouter = require('./routes/student_dashboard');
 const uploadProfilePictureRouter = require('./routes/uploadProfilePicture');
+const studentProfileRouter = require('./routes/student_profile');
+const coachProfileRouter = require('./routes/coach_profile'); // Added coach_profile route
 
 app.use('/api/user', userRouter);
 app.use('/api/chat', chatRouter);
@@ -24,7 +26,9 @@ app.use('/api/coach/dashboard', coachDashboardRouter);
 app.use('/api/coach/session', coachSessionRouter);
 app.use('/api/find-coach', findCoachRouter);
 app.use('/api/student/dashboard', studentDashboardRouter);
-app.use('/api/upload-profile-picture', uploadProfilePictureRouter);
+app.use('/api/uploadProfilePicture', uploadProfilePictureRouter);
+app.use('/api/student/profile', studentProfileRouter);
+app.use('/api/coach/profile', coachProfileRouter); // Registered coach_profile route
 
 app.get('/', (_req, res) => {
   res.send('Server is running');

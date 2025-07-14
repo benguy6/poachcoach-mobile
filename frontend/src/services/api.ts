@@ -1,4 +1,5 @@
-export const BACKEND_URL = "http://192.168.1.213:3000"; // Update as needed
+import axios from 'axios';
+export const BACKEND_URL = "http://192.168.88.13:3000"; // Update as needed
 
 async function post(endpoint: string, body: any) {
   const url = `${BACKEND_URL}${endpoint}`;
@@ -100,6 +101,131 @@ export const login = async (email: string, password: string) => {
 export const checkEmailExists = async (email: string) => {
   return await post("/api/user/request-reset-password", { email });
 };
+
+export const getCoachDashboard = async (token: string) => {
+  const res = await fetch(`${BACKEND_URL}/api/coach/dashboard`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return res.json();
+};
+
+export const getStudentDashboard = async (token: string) => {
+  const res = await fetch(`${BACKEND_URL}/api/student/dashboard`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return res.json();
+};
+
+export const getUserRole = async (token: string | undefined) => {
+  console.log('getUserRole called with token:', token ? 'present' : 'missing');
+  if (!token) throw new Error('No access token provided');
+  
+  const url = `${BACKEND_URL}/api/user/me`;
+  console.log('getUserRole - Making request to:', url);
+  
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  
+  console.log('getUserRole - Response status:', res.status);
+  console.log('getUserRole - Response ok:', res.ok);
+  
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.log('getUserRole - Error response:', errorText);
+    throw new Error('Failed to fetch user role');
+  }
+  
+  const data = await res.json();
+  console.log('getUserRole - Success response:', data);
+  return data;
+};
+
+export const createCoachSession = async (token: string, sessionData: any) => {
+  const res = await fetch(`${BACKEND_URL}/api/coach/session/create`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(sessionData),
+  });
+  if (!res.ok) throw new Error('Failed to create session');
+  return res.json();
+};
+
+import { getToken } from './auth';
+
+export const uploadProfilePicture = async (uri: string) => {
+  const token = await getToken();
+  if (!token) throw new Error('No token found');
+
+  const formData = new FormData();
+  formData.append('file', {
+    uri,
+    name: 'profile.jpg',
+    type: 'image/jpeg', // or 'image/png' if needed
+  } as any);
+
+  const res = await fetch(`${BACKEND_URL}/api/uploadProfilePicture`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      // DO NOT set Content-Type here!
+    },
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(errorText || 'Failed to upload');
+  }
+  const data = await res.json();
+  return data.url; // The new image URL
+};
+
+export const getStudentProfile = async (token: string) => {
+  const url = `${BACKEND_URL}/api/student/profile`;
+  console.log(`GET ${url}`);
+
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error(`Failed to fetch student profile:`, errorText);
+    throw new Error(errorText || "Failed to fetch student profile");
+  }
+
+  const data = await res.json();
+  console.log(`Student profile fetched successfully:`, data);
+  return data;
+};
+export const getCoachProfile = async (token: string) => {
+  const url = `${BACKEND_URL}/api/coach/profile`;
+  console.log(`GET ${url}`);
+
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error(`Failed to fetch coach profile:`, errorText);
+    throw new Error(errorText || "Failed to fetch coach profile");
+  }
+
+  const data = await res.json();
+  console.log(`Coach profile fetched successfully:`, data);
+  return data;
+};
+
+
 
 
 
