@@ -145,7 +145,6 @@ router.post('/signup-coach', async (req, res) => {
     gender,
     number,
     postal_code,
-    qualifications,
     sport,
   } = req.body;
 
@@ -207,7 +206,6 @@ router.post('/signup-coach', async (req, res) => {
     const coachPayload = {
       id,
       sport,
-      qualifications,
     };
 
     const { error: coachErr } = await supabase.from('Coaches').insert([coachPayload]);
@@ -247,7 +245,7 @@ router.post('/signup-student', async (req, res) => {
   try {
     let address, latitude, longitude;
     try {
-      const geoData = await getGeoFromPostalCode(postal_code.toString()); // Ensure postal_code is treated as a string
+      const geoData = await getGeoFromPostalCode(postal_code); // Ensure postal_code is treated as a string
       address = geoData.address;
       latitude = geoData.latitude;
       longitude = geoData.longitude;

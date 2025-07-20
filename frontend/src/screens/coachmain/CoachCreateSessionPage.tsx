@@ -1,40 +1,161 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
-  TextInput,
-  Modal,
   ScrollView,
   StyleSheet,
   Dimensions,
-  Platform,
-  KeyboardAvoidingView,
   SafeAreaView,
+  Modal,
+  TextInput,
   Alert,
 } from 'react-native';
 import MultiSlider from '@ptomasroos/react-native-multi-slider';
-import { CalendarList } from 'react-native-calendars';
-import * as Location from 'expo-location';
-import { createCoachSession } from '../../services/api';
+import { Calendar } from 'react-native-calendars';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { createCoachSession, createRecurringCoachSession, createMonthlyRecurringCoachSession } from '../../services/api';
 import { supabase } from '../../services/supabase';
-import { useNavigation } from '@react-navigation/native';
-import * as SecureStore from 'expo-secure-store';
 
-import {
-  ChevronLeft,
-  ChevronDown,
-  ChevronRight,
-  Map,
-} from 'lucide-react-native';
-import { useMemo } from 'react';
+const getToken = async (): Promise<string | null> => {
+  try {
+    const { data: sessionData, error } = await supabase.auth.getSession();
+
+    if (error) {
+      console.error('Failed to retrieve session:', error);
+      return null;
+    }
+
+    const token = sessionData.session?.access_token;
+
+    if (!token) {
+      console.error('No access token found');
+      return null;
+    }
+
+    return token;
+  } catch (err) {
+    console.error('Error retrieving token:', err);
+    return null;
+  }
+};
 
 const { width } = Dimensions.get('window');
-const gridWidth = width - 64;
+
+// Interface for the comprehensive weekly recurring session data
+interface WeeklyRecurringSessionData {
+  // Basic Session Information
+  sessionMetadata: {
+    sessionType: 'recurring';
+    frequency: 'weekly';
+    sport: string;
+    ageRange: string; // Format: "12-18 years"
+    description: string;
+    createdAt: string; // ISO timestamp
+  };
+
+  // Location Information
+  location: {
+    address: string;
+    postalCode: string;
+  };
+
+  // Class Configuration
+  classConfiguration: {
+    classType: 'single' | 'group';
+    maxStudents: number | null; // null for single class, number for group
+  };
+
+  // Schedule Configuration
+  scheduleConfiguration: {
+    startDate: string; // YYYY-MM-DD format
+    numberOfWeeks: number;
+    endDate: string; // Calculated: startDate + (numberOfWeeks * 7) days
+    selectedDays: string[]; // e.g., ['Monday', 'Wednesday', 'Friday']
+    dayTimes: {
+      [dayName: string]: {
+        startTime: string; // e.g., '09:00'
+        endTime: string; // e.g., '10:30'
+        duration: string; // e.g., '1hr 30mins'
+        durationInHours: number; // e.g., 1.5
+      };
+    };
+  };
+
+  // Pricing Information
+  pricing: {
+    dayPrices: {
+      [dayName: string]: {
+        pricePerSession: string;
+        pricePerHour: string; // Calculated
+      };
+    };
+  };
+
+  // Individual Sessions (Generated)
+  individualSessions: Array<{
+    date: string; // YYYY-MM-DD
+    dayOfWeek: string; // e.g., 'Monday'
+    startTime: string; // e.g., '09:00'
+    endTime: string; // e.g., '10:30'
+    duration: string; // e.g., '1hr 30mins'
+    durationInHours: number;
+    pricePerSession: string;
+    pricePerHour: string;
+    weekNumber: number; // Which week this session belongs to (1-based)
+    
+    // Inherited from parent session
+    sport: string;
+    ageRange: string; // Format: "12-18 years"
+    address: string;
+    postalCode: string;
+    classType: 'single' | 'group';
+    maxStudents: number | null;
+    availableSlots: number | null;
+    description: string;
+  }>;
+}
+
+// Define MonthlyRecurringSessionData interface
+interface MonthlyRecurringSessionData {
+  sessionMetadata: {
+    sessionType: string;
+    frequency: string;
+    sport: string;
+    ageRange: string;
+    description: string;
+    createdAt: string;
+  };
+  location: {
+    address: string;
+    postalCode: string;
+  };
+  classConfiguration: {
+    classType: 'single' | 'group';
+    maxStudents: number | null;
+  };
+  individualSessions: Array<{
+    date: string;
+    startTime: string;
+    endTime: string;
+    duration: string;
+    durationInHours: number;
+    pricePerSession: string;
+    pricePerHour: string;
+    sport: string;
+    ageRange: string;
+    address: string;
+    postalCode: string;
+    classType: 'single' | 'group';
+    maxStudents: number | null;
+    availableSlots: number | null;
+    description: string;
+  }>;
+}
 
 const sports = [
   'Yoga', 'Baseball', 'Basketball', 'Soccer', 'Tennis', 'Swimming',
-  'Fitness Training', 'Martial Arts', 'Running', 'Cycling'
+  'Fitness Training', 'Martial Arts', 'Running', 'Cycling',
 ];
 
 const timeSlots = [
@@ -45,668 +166,543 @@ const timeSlots = [
   '15:00', '15:15', '15:30', '15:45', '16:00', '16:15', '16:30', '16:45',
   '17:00', '17:15', '17:30', '17:45', '18:00', '18:15', '18:30', '18:45',
   '19:00', '19:15', '19:30', '19:45', '20:00', '20:15', '20:30', '20:45',
-  '21:00', '21:15', '21:30', '21:45', '22:00'
+  '21:00', '21:15', '21:30', '21:45', '22:00',
 ];
-
-const daysOfWeek = [
-  'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
-];
-
-const locations = [
-  'Wellness Studio, 123 Main Street',
-  'Sports Complex, 456 Oak Avenue',
-  'Community Center, 789 Pine Road',
-  'Outdoor Park, 321 Elm Street'
-];
-
-const existingSessions = [
-  { date: '2025-06-16', time: '10:00', title: 'Yoga Basics' },
-  { date: '2025-06-16', time: '14:00', title: 'Basketball Drills' },
-  { date: '2025-06-18', time: '09:00', title: 'Swimming' },
-  { date: '2025-06-20', time: '10:00', title: 'Yoga Basics' },
-  { date: '2025-06-20', time: '15:00', title: 'Personal Training' },
-  { date: '2025-06-22', time: '18:00', title: 'Group Fitness' },
-  { date: '2025-06-25', time: '09:00', title: 'Swimming Lessons' },
-];
-
-// Helper to check if a session exists on a given date
-const hasSession = (dateStr: string) => {
-  return existingSessions.some(s => s.date === dateStr);
-};
-
-// Get sessions for a specific date
-const getSessionsForDate = (dateStr: string) => {
-  return existingSessions.filter(s => s.date === dateStr);
-};
-
-// Render the calendar for the current month
-const renderCurrentMonthCalendar = (selectedDay: string | null, setSelectedDay: (day: string | null) => void) => {
-  const today = new Date();
-  const currentMonth = today.getMonth();
-  const currentYear = today.getFullYear();
-
-  // Helper to get days in month and first day
-  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-  const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay();
-
-  const days = [];
-  // Add empty cells for days before the first day of the month
-  for (let i = 0; i < firstDayOfMonth; i++) {
-    days.push({ type: 'empty', key: `empty-${i}` });
-  }
-  // Add cells for each day of the month
-  for (let day = 1; day <= daysInMonth; day++) {
-    days.push({ type: 'day', day, key: `day-${day}` });
-  }
-  // Add empty cells to complete the grid (always 6 rows)
-  while (days.length < 42) {
-    days.push({ type: 'empty', key: `empty-end-${days.length}` });
-  }
-  // Split into 6 rows of 7 cells
-  const rows = [];
-  for (let i = 0; i < 6; i++) {
-    rows.push(days.slice(i * 7, (i + 1) * 7));
-  }
-  return (
-    <View>
-      {rows.map((row, rowIndex) => (
-        <View key={`row-${rowIndex}`} style={{ flexDirection: 'row' }}>
-          {row.map(cell => {
-            if (cell.type === 'empty') {
-              return <View key={cell.key} style={styles.calendarEmptyCell} />;
-            } else {
-              const day = cell.day;
-              const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-              const isSelected = selectedDay === dateStr;
-              return (
-                <TouchableOpacity
-                  key={cell.key}
-                  onPress={() => setSelectedDay(dateStr)}
-                  style={[
-                    styles.calendarDay,
-                    isSelected && styles.calendarDaySelected,
-                  ]}
-                >
-                  <View style={{ alignItems: 'center' }}>
-                    <Text style={[
-                      styles.calendarDayText,
-                      isSelected ? { color: '#fff' } : { color: '#9ca3af' }
-                    ]}>
-                      {day}
-                    </Text>
-                    {hasSession(dateStr) && (
-                      <View style={{
-                        width: 6,
-                        height: 6,
-                        borderRadius: 3,
-                        backgroundColor: '#fb923c',
-                        marginTop: 2,
-                      }} />
-                    )}
-                  </View>
-                </TouchableOpacity>
-              );
-            }
-          })}
-        </View>
-      ))}
-    </View>
-  );
-};
 
 const CoachCreateSessionPage = () => {
-  const navigation = useNavigation();
   const [currentStep, setCurrentStep] = useState(1);
-  
-  interface SessionData {
-    sport: string;
-    minAge: number;
-    maxAge: number;
-    startTime: string;
-    endTime: string;
-    recurringDays: string[];
-    monthlyDates: string[];
-    location: string;
-    groupType: string;
-    maxStudents: string;
-    price: string;
-    description: string;
-    sessionType: string;
-    numberOfWeeks?: string;
-    startDate?: string;
-  }
+  const [selectedSport, setSelectedSport] = useState<string | null>(null);
+  const [sessionType, setSessionType] = useState<string>('single'); // Default to Single Class
+  const [ageRange, setAgeRange] = useState<[number, number]>([6, 80]); // Default age range
+  const [showDropdown, setShowDropdown] = useState(false); // State for dropdown visibility
+  const [sessionTime, setSessionTime] = useState<[number, number]>([0, 1]); // Default session time range
+  const [sessionDate, setSessionDate] = useState<string>(''); // Selected session date
+  const [postalCode, setPostalCode] = useState<string>(''); // Postal code input
+  const [classType, setClassType] = useState<string>('single'); // Default to Single Class
+  const [groupSize, setGroupSize] = useState<number>(2); // Default group size
+  const [pricePerSession, setPricePerSession] = useState<string>(''); // Price per session
+  const [description, setDescription] = useState<string>(''); // Session description
+  const [address, setAddress] = useState<string>(''); // Added state for address
+  const [frequency, setFrequency] = useState<string>('weekly'); // Frequency: weekly or monthly
+  const [selectedDays, setSelectedDays] = useState<string[]>([]); // Selected days for weekly frequency
+  const [dayTimes, setDayTimes] = useState<{ [key: string]: [number, number] }>({}); // Time slots for each selected day
+  const [numberOfWeeks, setNumberOfWeeks] = useState<number>(1); // Number of weeks
+  const [startDate, setStartDate] = useState<string>(''); // Start date input
+  const [dayPrices, setDayPrices] = useState<{ [key: string]: string }>({}); // Prices for each day
+  const [datePrices, setDatePrices] = useState<{ [key: string]: string }>({}); // Prices for each date
 
-  const [sessionData, setSessionData] = useState<SessionData>({
-    sport: '',
-    minAge: 6,
-    maxAge: 18,
-    startTime: '',
-    endTime: '',
-    recurringDays: [],
-    monthlyDates: [],
-    location: '',
-    groupType: '',
-    maxStudents: '',
-    price: '',
-    description: '',
-    sessionType: '',
-    numberOfWeeks: '',
-    startDate: ''
-  });
+  const navigation = useNavigation<any>();
 
-  const [showSportDropdown, setShowSportDropdown] = useState(false);
-  const [showStudentDropdown, setShowStudentDropdown] = useState(false);
-  const [showLocationModal, setShowLocationModal] = useState(false);
-  const [showCalendar, setShowCalendar] = useState(false);
-  const [showInlineCalendar, setShowInlineCalendar] = useState(false);
-  const [clashError, setClashError] = useState<string | null>(null);
-  // Remove calendarMonth state, renderStaticCalendar, and all calendar-related UI and logic
-  const [recurringType, setRecurringType] = useState<string>('weekly');
-
-  // Time slider states
-  const [timeRange, setTimeRange] = useState([0, 1]);
-  const [maxStudentsValue, setMaxStudentsValue] = useState(2);
-  const [selectedDay, setSelectedDay] = useState<string | null>(null);
-
-  useEffect(() => {
-    (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        console.warn('Permission denied');
-        return;
-      }
-
-      const location = await Location.getCurrentPositionAsync({});
-      const { latitude, longitude } = location.coords;
-
-      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
-      const data = await res.json();
-      const postal = data?.address?.postcode;
-
-      setSessionData(prev => ({ ...prev, location: postal || 'Unavailable' }));
-    })();
-  }, []);
-
-  const toggleDay = (day: string) => {
-    setSessionData((prev: SessionData) => {
-      const days = [...(prev.recurringDays || [])];
-      const index = days.indexOf(day);
-      if (index > -1) days.splice(index, 1);
-      else days.push(day);
-      return { ...prev, recurringDays: days };
-    });
-  };
-
-  interface ToggleDateDay {
-    dateString: string;
-    [key: string]: any;
-  }
-
-  const toggleDate = (day: string | ToggleDateDay) => {
-    const dateStr = typeof day === 'string' ? day : day.dateString;
-    setSessionData((prev: SessionData) => {
-      const dates = [...(prev.monthlyDates || [])];
-      const index = dates.indexOf(dateStr);
-      if (index > -1) dates.splice(index, 1);
-      else dates.push(dateStr);
-      return { ...prev, monthlyDates: dates };
-    });
-  };
-
-  const handleNext = () => {
-    if (currentStep < 4) setCurrentStep(currentStep + 1);
-  };
-
-  const handlePrevious = () => {
-    if (currentStep > 1) setCurrentStep(currentStep - 1);
-  };
-
-  const handleSubmit = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) throw new Error('No access token');
-      const coach_id = await SecureStore.getItemAsync('userId');
-      const payload = {
-        sport: sessionData.sport,
-        session_type: sessionData.sessionType,
-        start_time: sessionData.startTime,
-        end_time: sessionData.endTime,
-        recurring_type: sessionData.sessionType === 'recurring' ? recurringType : undefined,
-        recurring_days: sessionData.sessionType === 'recurring' && recurringType === 'weekly' ? sessionData.recurringDays : undefined,
-        recurring_dates: sessionData.sessionType === 'recurring' && recurringType === 'monthly' ? sessionData.monthlyDates : undefined,
-        repeat_count: sessionData.sessionType === 'recurring' && recurringType === 'weekly' ? sessionData.numberOfWeeks : undefined,
-        price_per_session: sessionData.price,
-        description: sessionData.description,
-        age_range_start: sessionData.minAge,
-        age_range_end: sessionData.maxAge,
-        max_students: sessionData.groupType === 'group' ? sessionData.maxStudents : '1',
-        postal_code: sessionData.location,
-        location_name: sessionData.location,
-        class_type: sessionData.groupType,
-        coach_id,
-      };
-      await createCoachSession(token, payload);
-      Alert.alert('Success', 'Session Successfully booked', [
-        { text: 'OK', onPress: () => navigation.reset({ index: 0, routes: [{ name: 'CoachMainApp' }] } as any) }
-      ]);
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to create session');
-    }
-  };
-
-  // Helper function to convert time index to time string
-  const getTimeFromIndex = (index: number) => {
-    return timeSlots[index] || '07:00';
-  };
-
-  // Helper function to convert time string to index
-  const getIndexFromTime = (time: string) => {
-    return timeSlots.indexOf(time);
-  };
-
-  // Update session data when time range changes
-  useEffect(() => {
-    setSessionData(prev => ({
-      ...prev,
-      startTime: getTimeFromIndex(timeRange[0]),
-      endTime: getTimeFromIndex(timeRange[1])
-    }));
-  }, [timeRange]);
-
-  // Update session data when max students changes
-  useEffect(() => {
-    setSessionData(prev => ({
-      ...prev,
-      maxStudents: maxStudentsValue.toString()
-    }));
-  }, [maxStudentsValue]);
-
-  // Helper to get days in month and first day
-  const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
-  const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getDay();
-  
-  // Calculate total cells needed to ensure full weeks are shown (always 6 rows)
-  const totalCells = 42; // 6 rows × 7 days = 42 cells
-
-  const handleCalendarDayPress = (day: number) => {
-    const dateStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    toggleDate(dateStr);
-  };
-
-  const renderStaticCalendar = () => {
-    const days = [];
-    // Add empty cells for days before the first day of the month
-    for (let i = 0; i < firstDayOfMonth; i++) {
-      days.push({ type: 'empty', key: `empty-${i}` });
-    }
-    // Add cells for each day of the month
-    for (let day = 1; day <= daysInMonth; day++) {
-      days.push({ type: 'day', day, key: `day-${day}` });
-    }
-    // Add empty cells to complete the grid (always 42 cells)
-    while (days.length < 42) {
-      days.push({ type: 'empty', key: `empty-end-${days.length}` });
-    }
-
-    // Split into 6 rows of 7 cells
-    const rows = [];
-    for (let i = 0; i < 6; i++) {
-      rows.push(days.slice(i * 7, (i + 1) * 7));
-    }
-
-    return rows.map((row, rowIndex) => (
-      <View key={`row-${rowIndex}`} style={{ flexDirection: 'row' }}>
-        {row.map(cell => {
-          if (cell.type === 'empty') {
-            return <View key={cell.key} style={styles.calendarEmptyCell} />;
-          } else {
-            const day = cell.day;
-            const dateStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-            const isSelected = (sessionData.monthlyDates && sessionData.monthlyDates.includes(dateStr));
-            // Debug output
-            console.log('Rendering day:', day, typeof day);
-            return (
-              <TouchableOpacity
-                key={cell.key}
-                onPress={() => typeof day === 'number' && handleCalendarDayPress(day)}
-                style={[
-                  styles.calendarDay,
-                  isSelected && styles.calendarDaySelected,
-                ]}
-              >
-                <View style={{ alignItems: 'center' }}>
-                  <Text style={{ color: 'red', fontSize: 16 }}>
-                    {typeof day === 'number' ? String(day) : '?'}
-                  </Text>
-                  {hasSession(dateStr) && (
-                    <View style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: 3,
-                      backgroundColor: '#fb923c',
-                      marginTop: 2,
-                    }} />
-                  )}
-                </View>
-              </TouchableOpacity>
-            );
-          }
-        })}
-      </View>
-    ));
-  };
-
-  // Step 1: Sport & Session Type
-  const renderStep1 = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>Session Details</Text>
-
-      {/* Sport Selection */}
-      <Text style={styles.label}>What sport/activity?</Text>
-      <TouchableOpacity
-        style={styles.dropdownButton}
-        onPress={() => setShowSportDropdown(true)}
-      >
-        <Text style={sessionData.sport ? styles.dropdownText : styles.dropdownPlaceholder}>
-          {sessionData.sport || 'Select sport'}
-        </Text>
-        <ChevronDown size={20} color="#9ca3af" />
-      </TouchableOpacity>
-      <Modal visible={showSportDropdown} transparent animationType="fade">
-        <TouchableOpacity style={styles.modalOverlay} onPress={() => setShowSportDropdown(false)}>
-          <View style={styles.dropdownModal}>
-            <ScrollView>
-              {sports.map((sport) => (
-                <TouchableOpacity
-                  key={sport}
-                  style={styles.dropdownOption}
-                  onPress={() => {
-                    setSessionData({ ...sessionData, sport });
-                    setShowSportDropdown(false);
-                  }}
-                >
-                  <Text style={styles.dropdownText}>{sport}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* Session Type */}
-      <Text style={styles.label}>Session type</Text>
-      <View style={styles.row}>
-        <TouchableOpacity
-          style={[
-            styles.typeButton,
-            sessionData.sessionType === 'single' && styles.typeButtonActive
-          ]}
-          onPress={() => setSessionData({ ...sessionData, sessionType: 'single' })}
-        >
-          <Text style={sessionData.sessionType === 'single' ? styles.typeButtonTextActive : styles.typeButtonText}>
-            Single Class
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.typeButton,
-            sessionData.sessionType === 'recurring' && styles.typeButtonActive
-          ]}
-          onPress={() => setSessionData({ ...sessionData, sessionType: 'recurring' })}
-        >
-          <Text style={sessionData.sessionType === 'recurring' ? styles.typeButtonTextActive : styles.typeButtonText}>
-            Recurring Class
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Age Range Slider */}
-      <Text style={styles.label}>Age Range: {sessionData.minAge} - {sessionData.maxAge} years</Text>
-      <View style={styles.sliderContainer}>
-        <MultiSlider
-          values={[sessionData.minAge, sessionData.maxAge]}
-          min={4}
-          max={80}
-          step={1}
-          sliderLength={width - 80}
-          onValuesChange={([minAge, maxAge]) => setSessionData({ ...sessionData, minAge, maxAge })}
-          selectedStyle={{ backgroundColor: '#fb923c' }}
-          unselectedStyle={{ backgroundColor: '#374151' }}
-          containerStyle={{ height: 40 }}
-          trackStyle={{ height: 4, borderRadius: 2 }}
-          markerStyle={{
-            backgroundColor: '#fb923c',
-            height: 20,
-            width: 20,
-            borderRadius: 10,
-            borderWidth: 2,
-            borderColor: '#fff'
-          }}
-        />
-      </View>
-    </View>
+  // Reset state variables when the page gains focus
+  useFocusEffect(
+    React.useCallback(() => {
+      setCurrentStep(1);
+      setSelectedSport(null);
+      setSessionType('single');
+      setAgeRange([6, 80]);
+      setShowDropdown(false);
+      setSessionTime([0, 1]);
+      setSessionDate('');
+      setPostalCode('');
+      setClassType('single');
+      setGroupSize(2);
+      setPricePerSession('');
+      setDescription('');
+      setAddress(''); // Reset address state
+      setFrequency('weekly'); // Reset frequency
+      setSelectedDays([]); // Reset selected days
+      setDayTimes({}); // Reset day times
+      setNumberOfWeeks(1); // Reset number of weeks
+      setStartDate(''); // Reset start date
+      setDayPrices({}); // Reset day prices for weekly sessions
+      setDatePrices({}); // Reset date prices for monthly sessions
+    }, [])
   );
 
-  // Step 2: Schedule
-  const renderStep2 = () => {
-    const today = new Date();
-    const currentYear = today.getFullYear();
-    return (
-      <View style={styles.stepContainer}>
-        <Text style={styles.stepTitle}>Schedule</Text>
+  const handleSportSelect = (sport: string) => {
+    setSelectedSport(sport);
+    setShowDropdown(false); // Close dropdown after selection
+  };
 
-        {/* Time Range */}
-        <Text style={styles.label}>Time: {getTimeFromIndex(timeRange[0])} - {getTimeFromIndex(timeRange[1])}</Text>
-        <View style={styles.timeSliderContainer}>
-          <MultiSlider
-            values={timeRange}
-            min={0}
-            max={timeSlots.length - 1}
-            step={1}
-            sliderLength={width - 80}
-            onValuesChange={setTimeRange}
-            selectedStyle={{ backgroundColor: '#fb923c' }}
-            unselectedStyle={{ backgroundColor: '#374151' }}
-            containerStyle={{ height: 40 }}
-            trackStyle={{ height: 4, borderRadius: 2 }}
-            markerStyle={{
-              backgroundColor: '#fb923c',
-              height: 20,
-              width: 20,
-              borderRadius: 10,
-              borderWidth: 2,
-              borderColor: '#fff'
-            }}
-          />
-          <View style={styles.timeLabels}>
-            <Text style={styles.timeLabel}>{timeSlots[0]}</Text>
-            <Text style={styles.timeLabel}>{timeSlots[Math.floor((timeSlots.length - 1) / 2)]}</Text>
-            <Text style={styles.timeLabel}>{timeSlots[timeSlots.length - 1]}</Text>
+  const generateWeeklyDates = (startDate: string, selectedDays: string[], numberOfWeeks: number): string[] => {
+    const start = new Date(startDate);
+    const daysOfWeek = {
+      Monday: 1,
+      Tuesday: 2,
+      Wednesday: 3,
+      Thursday: 4,
+      Friday: 5,
+      Saturday: 6,
+      Sunday: 0,
+    };
+  
+    const generatedDates: string[] = [];
+  
+    for (let week = 0; week < numberOfWeeks; week++) {
+      selectedDays.forEach((day) => {
+        const dayOffset = daysOfWeek[day as keyof typeof daysOfWeek] - start.getDay();
+        const sessionDate = new Date(start);
+        sessionDate.setDate(start.getDate() + dayOffset + week * 7);
+  
+        if (sessionDate >= start) {
+          generatedDates.push(sessionDate.toISOString().split('T')[0]); // Format as YYYY-MM-DD
+        }
+      });
+    }
+  
+    return generatedDates;
+  };
+
+  const handleSessionTypeChange = (type: string) => {
+    setSessionType(type);
+  };
+
+  const handleAgeRangeChange = (values: [number, number]) => {
+    setAgeRange(values);
+  };
+
+  const handlePreviousStep = () => {
+    setCurrentStep(currentStep - 1);
+  };
+
+  const handlePostalCodeChange = (text: string) => {
+    if (text.length <= 6) {
+      setPostalCode(text);
+    }
+  };
+
+  const calculateDuration = (startTime: string, endTime: string) => {
+    const start = new Date(`1970-01-01T${startTime}:00`);
+    const end = new Date(`1970-01-01T${endTime}:00`);
+    return (end.getTime() - start.getTime()) / (1000 * 60 * 60); 
+  };
+
+  const formatDuration = (durationInHours: number): string => {
+    const hours = Math.floor(durationInHours); 
+    const minutes = Math.round((durationInHours - hours) * 60); 
+  
+    let result = '';
+    if (hours > 0) {
+      result += `${hours}hr${hours > 1 ? 's' : ''} `;
+    }
+    if (minutes > 0) {
+      result += `${minutes}min${minutes > 1 ? 's' : ''}`;
+    }
+  
+    return result.trim(); 
+  };
+
+  const calculatePricePerHour = (pricePerSession: string, startTime: string, endTime: string) => {
+    const duration = calculateDuration(startTime, endTime);
+    return duration > 0 ? (parseFloat(pricePerSession) / duration).toFixed(2) : null;
+  };
+
+  const createWeeklyRecurringSessionObject = (): WeeklyRecurringSessionData => {
+    // Calculate end date
+    const start = new Date(startDate);
+    const endDateCalculated = new Date(start);
+    endDateCalculated.setDate(start.getDate() + (numberOfWeeks * 7) - 1);
+
+    // Generate all session dates
+    const sessionDates = generateWeeklyDates(startDate, selectedDays, numberOfWeeks);
+
+    // Build dayTimes object with calculated durations
+    const dayTimesWithDurations: { [dayName: string]: { startTime: string; endTime: string; duration: string; durationInHours: number } } = {};
+    selectedDays.forEach(day => {
+      const timeRange = dayTimes[day] || [0, 1];
+      const startTime = timeSlots[timeRange[0]];
+      const endTime = timeSlots[timeRange[1]];
+      const durationInHours = calculateDuration(startTime, endTime);
+      const duration = formatDuration(durationInHours);
+      
+      dayTimesWithDurations[day] = {
+        startTime,
+        endTime,
+        duration,
+        durationInHours
+      };
+    });
+
+    // Build pricing object with calculated price per hour
+    const pricingData: { [dayName: string]: { pricePerSession: string; pricePerHour: string } } = {};
+    selectedDays.forEach(day => {
+      const pricePerSession = dayPrices[day] || '0';
+      const timeRange = dayTimes[day] || [0, 1];
+      const pricePerHour = calculatePricePerHour(pricePerSession, timeSlots[timeRange[0]], timeSlots[timeRange[1]]) || '0';
+      
+      pricingData[day] = {
+        pricePerSession,
+        pricePerHour
+      };
+    });
+
+    // Generate individual sessions
+    const individualSessions = sessionDates.map((date, index) => {
+      const sessionDate = new Date(date);
+      const dayOfWeek = sessionDate.toLocaleDateString('en-US', { weekday: 'long' });
+      const weekNumber = Math.floor(index / selectedDays.length) + 1;
+      
+      const timeRange = dayTimes[dayOfWeek] || [0, 1];
+      const startTime = timeSlots[timeRange[0]];
+      const endTime = timeSlots[timeRange[1]];
+      const durationInHours = calculateDuration(startTime, endTime);
+      const duration = formatDuration(durationInHours);
+      const pricePerSession = dayPrices[dayOfWeek] || '0';
+      const pricePerHour = calculatePricePerHour(pricePerSession, startTime, endTime) || '0';
+
+      return {
+        date,
+        dayOfWeek,
+        startTime,
+        endTime,
+        duration,
+        durationInHours,
+        pricePerSession,
+        pricePerHour,
+        weekNumber,
+        sport: selectedSport || '',
+        ageRange: `${ageRange[0]}-${ageRange[1]} years`,
+        address,
+        postalCode,
+        classType: classType as 'single' | 'group',
+        maxStudents: classType === 'group' ? groupSize : null,
+        availableSlots: classType === 'group' ? groupSize : null,
+        description
+      };
+    });
+
+    return {
+      sessionMetadata: {
+        sessionType: 'recurring',
+        frequency: 'weekly',
+        sport: selectedSport || '',
+        ageRange: `${ageRange[0]}-${ageRange[1]} years`,
+        description,
+        createdAt: new Date().toISOString()
+      },
+      location: {
+        address,
+        postalCode
+      },
+      classConfiguration: {
+        classType: classType as 'single' | 'group',
+        maxStudents: classType === 'group' ? groupSize : null
+      },
+      scheduleConfiguration: {
+        startDate,
+        numberOfWeeks,
+        endDate: endDateCalculated.toISOString().split('T')[0],
+        selectedDays,
+        dayTimes: dayTimesWithDurations
+      },
+      pricing: {
+        dayPrices: pricingData
+      },
+      individualSessions
+    };
+  };
+
+  const createMonthlyRecurringSessionObject = (): MonthlyRecurringSessionData => {
+    // Generate individual sessions for each selected date
+    const individualSessions = selectedDays.map((date) => {
+      const timeRange = dayTimes[date] || [0, 1];
+      const startTime = timeSlots[timeRange[0]];
+      const endTime = timeSlots[timeRange[1]];
+      const durationInHours = calculateDuration(startTime, endTime);
+      const duration = formatDuration(durationInHours);
+      const pricePerSession = datePrices[date] || '0';
+      const pricePerHour = calculatePricePerHour(pricePerSession, startTime, endTime) || '0';
+
+      return {
+        date,
+        dayOfWeek: new Date(date).toLocaleDateString('en-US', { weekday: 'long' }),
+        startTime,
+        endTime,
+        duration,
+        durationInHours,
+        pricePerSession,
+        pricePerHour,
+        sport: selectedSport || '',
+        ageRange: `${ageRange[0]}-${ageRange[1]} years`,
+        address,
+        postalCode,
+        classType: classType as 'single' | 'group',
+        maxStudents: classType === 'group' ? groupSize : null,
+        availableSlots: classType === 'group' ? groupSize : null,
+        description
+      };
+    });
+
+    return {
+      sessionMetadata: {
+        sessionType: 'recurring',
+        frequency: 'monthly',
+        sport: selectedSport || '',
+        ageRange: `${ageRange[0]}-${ageRange[1]} years`,
+        description,
+        createdAt: new Date().toISOString()
+      },
+      location: {
+        address,
+        postalCode
+      },
+      classConfiguration: {
+        classType: classType as 'single' | 'group',
+        maxStudents: classType === 'group' ? groupSize : null
+      },
+      individualSessions
+    };
+  };
+
+  const handleCreateSession = async () => {
+    try {
+      const token = await getToken();
+      
+      if (!token) {
+        throw new Error('Authentication token is missing.');
+      }
+
+      let sessionData;
+
+      if (sessionType === 'single') {
+        // Handle single session
+        const duration = calculateDuration(timeSlots[sessionTime[0]], timeSlots[sessionTime[1]]);
+        const formatted = formatDuration(duration);
+        const pricePerHour = calculatePricePerHour(
+          pricePerSession,
+          timeSlots[sessionTime[0]],
+          timeSlots[sessionTime[1]]
+        );
+
+        sessionData = {
+          start_time: timeSlots[sessionTime[0]],
+          end_time: timeSlots[sessionTime[1]],
+          duration: formatted,
+          date: sessionDate,
+          day_of_week: new Date(sessionDate).toLocaleDateString('en-US', { weekday: 'long' }),
+          postal_code: postalCode,
+          address, 
+          session_type: sessionType,
+          class_type: classType,
+          max_students: classType === 'group' ? groupSize : null,
+          available_slots: classType === 'group' ? groupSize : null,
+          age_range: `${ageRange[0]}-${ageRange[1]} years`,
+          sport: selectedSport,
+          description,
+          price_per_session: pricePerSession,
+          price_per_hour: pricePerHour,
+        };
+
+        // Call single session API
+        const response = await createCoachSession(token, sessionData);
+        
+      } else if (sessionType === 'recurring' && frequency === 'weekly') {
+        // Handle weekly recurring session - create comprehensive object
+        const weeklySessionData = createWeeklyRecurringSessionObject();
+        
+        console.log('Weekly Recurring Session Data:', JSON.stringify(weeklySessionData, null, 2));
+        
+        // Call recurring session API with the comprehensive object
+        const response = await createRecurringCoachSession(token, weeklySessionData);
+        
+      } else if (sessionType === 'recurring' && frequency === 'monthly') {
+        // Handle monthly recurring session - create comprehensive object
+        const monthlySessionData = createMonthlyRecurringSessionObject();
+        
+        console.log('Monthly Recurring Session Data:', JSON.stringify(monthlySessionData, null, 2));
+        
+        // Call monthly recurring session API with the comprehensive object
+        const response = await createMonthlyRecurringCoachSession(token, monthlySessionData);
+        
+      } else {
+        // Fallback for any other session types
+        throw new Error('Invalid session type or frequency');
+      }
+
+      // Show success pop-up
+      Alert.alert('Success', 'Session created successfully!', [
+        {
+          text: 'OK',
+          onPress: () => navigation.navigate('CoachHome'),
+        },
+      ]);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create session';
+      Alert.alert('Error', errorMessage);
+    }
+  };
+
+  function handleDayTimeChange(day: string, timeRange: [number, number]): void {
+    setDayTimes((prevDayTimes) => ({
+      ...prevDayTimes,
+      [day]: timeRange,
+    }));
+  }
+  function handleDaySelection(day: string): void {
+    setSelectedDays((prevSelectedDays) => {
+      if (prevSelectedDays.includes(day)) {
+        return prevSelectedDays.filter((selectedDay) => selectedDay !== day);
+      } else {
+
+        return [...prevSelectedDays, day];
+      }
+    });
+  }
+
+  const validateStartDate = (date: string): boolean => {
+    const regex = /^\d{4}-\d{2}-\d{2}$/; // YYYY-MM-DD format
+    if (!regex.test(date)) {
+      return false; // Invalid format
+    }
+
+    const dayOfWeek = new Date(date).toLocaleDateString('en-US', { weekday: 'long' });
+    return selectedDays.includes(dayOfWeek); 
+  };
+
+  // Helper function to validate weekly session fields in step 4
+  const validateWeeklySessionFields = (): boolean => {
+    if (!description) return false;
+    
+    // Check if all selected days have prices
+    for (const day of selectedDays) {
+      if (!dayPrices[day] || dayPrices[day].trim() === '') {
+        return false;
+      }
+    }
+    
+    return true;
+  };
+
+  // Helper function to validate monthly session fields in step 4
+  const validateMonthlySessionFields = (): boolean => {
+    if (!description) return false;
+    
+    // Check if all selected dates have prices
+    for (const date of selectedDays) {
+      if (!datePrices[date] || datePrices[date].trim() === '') {
+        return false;
+      }
+    }
+    
+    return true;
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      {/* Stage Indicator */}
+      <View style={styles.stageIndicator}>
+        {[1, 2, 3, 4].map((stage) => (
+          <View
+            key={stage}
+            style={[
+              styles.stageCircle,
+              stage === currentStep && styles.stageCircleActive, // Highlight current stage
+            ]}
+          >
+            <Text
+              style={[
+                styles.stageText,
+                stage === currentStep && styles.stageTextActive, // Highlight text for current stage
+              ]}
+            >
+              {stage}
+            </Text>
           </View>
-        </View>
+        ))}
+      </View>
 
-        {/* Single Class: Date Selection */}
-        {sessionData.sessionType === 'single' && (
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* Render content for each step */}
+        {currentStep === 1 && (
           <>
-            <Text style={styles.label}>Pick Date (YYYY-MM-DD)</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor="#9ca3af"
-              value={sessionData.monthlyDates && sessionData.monthlyDates[0] ? sessionData.monthlyDates[0] : ''}
-              onChangeText={val => {
-                // Only allow one date for single session
-                setSessionData(prev => ({ ...prev, monthlyDates: [val] }));
-              }}
-            />
-            {/* Show sessions for entered date if any */}
-            {sessionData.monthlyDates && sessionData.monthlyDates[0] && (
-              existingSessions.some(s => s.date === sessionData.monthlyDates[0]) ? (
-                <View style={{ marginTop: 16, backgroundColor: '#27272a', borderRadius: 10, padding: 12 }}>
-                  <Text style={{ color: '#fff', fontWeight: 'bold', marginBottom: 8 }}>Sessions on {sessionData.monthlyDates[0]}:</Text>
-                  {existingSessions.filter(s => s.date === sessionData.monthlyDates[0]).map((session, idx) => (
-                    <View key={idx} style={{ marginBottom: 6 }}>
-                      <Text style={{ color: '#fb923c', fontWeight: 'bold' }}>{session.title}</Text>
-                      <Text style={{ color: '#fff' }}>{session.time}</Text>
-                    </View>
+            {/* Step 1 Content */}
+            {/* Select Sport */}
+            <Text style={styles.label}>Select a Sport</Text>
+            <TouchableOpacity
+              style={styles.dropdownButton}
+              onPress={() => setShowDropdown(true)}
+            >
+              <Text style={styles.dropdownButtonText}>
+                {selectedSport || 'Choose a Sport'}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Dropdown Modal */}
+            <Modal visible={showDropdown} transparent animationType="slide">
+              <View style={styles.modalContainer}>
+                <View style={styles.modalContent}>
+                  {sports.map((sport) => (
+                    <TouchableOpacity
+                      key={sport}
+                      style={styles.modalItem}
+                      onPress={() => handleSportSelect(sport)}
+                    >
+                      <Text style={styles.modalItemText}>{sport}</Text>
+                    </TouchableOpacity>
                   ))}
-                  <Text style={{ color: 'red', marginTop: 8 }}>Warning: There are already sessions booked on this date.</Text>
+                  <TouchableOpacity
+                    style={styles.modalCloseButton}
+                    onPress={() => setShowDropdown(false)}
+                  >
+                    <Text style={styles.modalCloseButtonText}>Close</Text>
+                  </TouchableOpacity>
                 </View>
-              ) : null
-            )}
-          </>
-        )}
+              </View>
+            </Modal>
 
-        {/* Recurring Class: Weekly/Monthly */}
-        {sessionData.sessionType === 'recurring' && (
-          <>
-            <Text style={styles.label}>Recurring Type</Text>
-            <View style={styles.row}>
+            {/* Select Session Type */}
+            <Text style={styles.label}>Session Type</Text>
+            <View style={styles.buttonGroup}>
               <TouchableOpacity
                 style={[
-                  styles.typeButton,
-                  recurringType === 'weekly' && styles.typeButtonActive
+                  styles.sessionButton,
+                  sessionType === 'single' && styles.sessionButtonSelected,
                 ]}
-                onPress={() => setRecurringType('weekly')}
+                onPress={() => handleSessionTypeChange('single')}
               >
-                <Text style={recurringType === 'weekly' ? styles.typeButtonTextActive : styles.typeButtonText}>
-                  Weekly
+                <Text
+                  style={
+                    sessionType === 'single'
+                      ? styles.sessionButtonTextSelected
+                      : styles.sessionButtonText
+                  }
+                >
+                  Single Class
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[
-                  styles.typeButton,
-                  recurringType === 'monthly' && styles.typeButtonActive
+                  styles.sessionButton,
+                  sessionType === 'recurring' && styles.sessionButtonSelected,
                 ]}
-                onPress={() => setRecurringType('monthly')}
+                onPress={() => handleSessionTypeChange('recurring')}
               >
-                <Text style={recurringType === 'monthly' ? styles.typeButtonTextActive : styles.typeButtonText}>
-                  Monthly
+                <Text
+                  style={
+                    sessionType === 'recurring'
+                      ? styles.sessionButtonTextSelected
+                      : styles.sessionButtonText
+                  }
+                >
+                  Recurring Class
                 </Text>
               </TouchableOpacity>
             </View>
 
-            {/* Weekly: Number of Weeks and Start Date */}
-            {recurringType === 'weekly' && (
-              <>
-                <Text style={styles.label}>Number of weeks</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g., 8"
-                  placeholderTextColor="#9ca3af"
-                  keyboardType="numeric"
-                  value={sessionData.numberOfWeeks}
-                  onChangeText={(val) => setSessionData({ ...sessionData, numberOfWeeks: val })}
-                />
-
-                <Text style={styles.label}>Start Date (YYYY-MM-DD)</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor="#9ca3af"
-                  value={sessionData.startDate}
-                  onChangeText={(val) => setSessionData({ ...sessionData, startDate: val })}
-                />
-
-                <Text style={styles.label}>Recurring Days</Text>
-                <View style={styles.daysContainer}>
-                  {daysOfWeek.map(day => (
-                    <TouchableOpacity
-                      key={day}
-                      style={[
-                        styles.dayButton,
-                        sessionData.recurringDays.includes(day) && styles.dayButtonActive
-                      ]}
-                      onPress={() => toggleDay(day)}
-                    >
-                      <Text style={sessionData.recurringDays.includes(day) ? styles.dayButtonTextActive : styles.dayButtonText}>
-                        {day.substring(0, 3)}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </>
-            )}
-
-            {/* Monthly: Calendar Multi-Select */}
-            {recurringType === 'monthly' && (
-              <>
-                <Text style={styles.label}>Pick Dates (One Month Only)</Text>
-                <View style={{height: 100, justifyContent: 'center', alignItems: 'center'}}>
-                  <Text style={{color: '#9ca3af'}}>Monthly calendar selection will be available in a future update.</Text>
-                </View>
-              </>
-            )}
-          </>
-        )}
-      </View>
-    );
-  };
-
-  // Step 3: Location & Group Type
-  const renderStep3 = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>Location & Group Type</Text>
-
-      {/* Postal Code */}
-      <Text style={styles.label}>Postal Code</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Enter postal code"
-        placeholderTextColor="#9ca3af"
-        value={sessionData.location}
-        onChangeText={(val) => {
-          // Limit to 6 characters
-          const limitedVal = val.slice(0, 6);
-          setSessionData({ ...sessionData, location: limitedVal });
-        }}
-        keyboardType="numeric"
-        maxLength={6}
-      />
-
-      {/* Group Type */}
-      <Text style={styles.label}>Session format</Text>
-      <View style={styles.row}>
-        <TouchableOpacity
-          style={[
-            styles.typeButton,
-            sessionData.groupType === 'individual' && styles.typeButtonActive
-          ]}
-          onPress={() => setSessionData({ ...sessionData, groupType: 'individual' })}
-        >
-          <Text style={sessionData.groupType === 'individual' ? styles.typeButtonTextActive : styles.typeButtonText}>
-            Individual
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.typeButton,
-            sessionData.groupType === 'group' && styles.typeButtonActive
-          ]}
-          onPress={() => setSessionData({ ...sessionData, groupType: 'group' })}
-        >
-          <Text style={sessionData.groupType === 'group' ? styles.typeButtonTextActive : styles.typeButtonText}>
-            Group Session
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Max Students Slider */}
-      {sessionData.groupType === 'group' && (
-        <>
-          <Text style={styles.label}>Maximum students: {maxStudentsValue}</Text>
-          <View style={styles.sliderContainer}>
+            {/* Age Range Slider */}
+            <Text style={styles.label}>
+              Age Range: {ageRange[0]} - {ageRange[1]} years
+            </Text>
             <MultiSlider
-              values={[maxStudentsValue]}
-              min={2}
-              max={20}
+              values={ageRange}
+              min={6}
+              max={80}
               step={1}
-              sliderLength={width - 80}
-              onValuesChange={([value]) => setMaxStudentsValue(value)}
+              sliderLength={width - 40}
+              onValuesChange={(values) => handleAgeRangeChange(values as [number, number])}
               selectedStyle={{ backgroundColor: '#fb923c' }}
               unselectedStyle={{ backgroundColor: '#374151' }}
-              containerStyle={{ height: 40 }}
+              containerStyle={{ marginVertical: 20 }}
               trackStyle={{ height: 4, borderRadius: 2 }}
               markerStyle={{
                 backgroundColor: '#fb923c',
@@ -714,202 +710,682 @@ const CoachCreateSessionPage = () => {
                 width: 20,
                 borderRadius: 10,
                 borderWidth: 2,
-                borderColor: '#fff'
+                borderColor: '#fff',
               }}
             />
-          </View>
-        </>
-      )}
-    </View>
-  );
+          </>
+        )}
 
-  // Step 4: Pricing & Details
-  const renderStep4 = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.stepTitle}>Pricing & Details</Text>
+        {currentStep === 2 && sessionType === 'single' && (
+          <>
+            {/* Step 2 Content */}
+            {/* Session Time Slider */}
+            <Text style={styles.label}>
+              Session Time: {timeSlots[sessionTime[0]]} - {timeSlots[sessionTime[1]]}
+            </Text>
+            <MultiSlider
+              values={sessionTime}
+              min={0}
+              max={timeSlots.length - 1}
+              step={1}
+              sliderLength={width - 40}
+              onValuesChange={(values) => setSessionTime(values as [number, number])}
+              selectedStyle={{ backgroundColor: '#fb923c' }}
+              unselectedStyle={{ backgroundColor: '#374151' }}
+              containerStyle={{ marginVertical: 20 }}
+              trackStyle={{ height: 4, borderRadius: 2 }}
+              markerStyle={{
+                backgroundColor: '#fb923c',
+                height: 20,
+                width: 20,
+                borderRadius: 10,
+                borderWidth: 2,
+                borderColor: '#fff',
+              }}
+            />
 
-      {/* Price */}
-      <Text style={styles.label}>Price per session ($)</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="0.00"
-        placeholderTextColor="#9ca3af"
-        keyboardType="numeric"
-        value={sessionData.price}
-        onChangeText={val => setSessionData({ ...sessionData, price: val })}
-      />
+            {/* Calendar for Session Date */}
+            <Text style={styles.label}>Session Date</Text>
+            <Calendar
+              onDayPress={(day) => setSessionDate(day.dateString)} // Set selected date
+              markedDates={{
+                [sessionDate]: { selected: true, marked: true, selectedColor: '#fb923c' },
+              }}
+              theme={{
+                calendarBackground: '#18181b',
+                textSectionTitleColor: '#d1d5db',
+                selectedDayBackgroundColor: '#fb923c',
+                selectedDayTextColor: '#fff',
+                todayTextColor: '#fb923c',
+                dayTextColor: '#d1d5db',
+                arrowColor: '#fb923c',
+                monthTextColor: '#fff',
+              }}
+              hideExtraDays={true} // Hides dates from previous and next months
+              minDate={new Date().toISOString().split('T')[0]} // Restrict dates to today and onward
+            />
+          </>
+        )}
 
-      {/* Description */}
-      <Text style={styles.label}>Description (optional)</Text>
-      <TextInput
-        style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
-        placeholder="Tell students what they can expect from this session..."
-        placeholderTextColor="#9ca3af"
-        multiline
-        value={sessionData.description}
-        onChangeText={val => setSessionData({ ...sessionData, description: val })}
-      />
-
-      {/* Summary */}
-      <View style={styles.summaryCard}>
-        <Text style={styles.summaryTitle}>Session Summary</Text>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Sport:</Text>
-          <Text style={styles.summaryValue}>{sessionData.sport || 'Not selected'}</Text>
-        </View>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Age Range:</Text>
-          <Text style={styles.summaryValue}>{sessionData.minAge} - {sessionData.maxAge} years</Text>
-        </View>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Time:</Text>
-          <Text style={styles.summaryValue}>{sessionData.startTime} - {sessionData.endTime}</Text>
-        </View>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Type:</Text>
-          <Text style={styles.summaryValue}>{sessionData.sessionType} - {sessionData.groupType}</Text>
-        </View>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Price:</Text>
-          <Text style={styles.summaryValue}>${sessionData.price || '0.00'}</Text>
-        </View>
-      </View>
-    </View>
-  );
-
-  const canProceed = () => {
-    let canProceedResult = false;
-    
-    if (currentStep === 1) {
-      canProceedResult = !!(sessionData.sport && sessionData.sessionType);
-    } else if (currentStep === 2) {
-      if (!sessionData.startTime || !sessionData.endTime) {
-        canProceedResult = false;
-      } else if (sessionData.sessionType === 'single') {
-        canProceedResult = (sessionData.monthlyDates && sessionData.monthlyDates.length === 1);
-      } else if (sessionData.sessionType === 'recurring') {
-        if (recurringType === 'weekly') {
-          canProceedResult = !!(sessionData.numberOfWeeks && sessionData.startDate && sessionData.recurringDays && sessionData.recurringDays.length > 0);
-        } else if (recurringType === 'monthly') {
-          canProceedResult = (sessionData.monthlyDates && sessionData.monthlyDates.length > 0);
-        }
-      }
-    } else if (currentStep === 3) {
-      canProceedResult = !!(sessionData.location && sessionData.location.trim() !== '' && sessionData.groupType);
-    } else {
-      canProceedResult = true;
-    }
-    
-    console.log(`Step ${currentStep} canProceed:`, canProceedResult, {
-      sport: sessionData.sport,
-      sessionType: sessionData.sessionType,
-      startTime: sessionData.startTime,
-      endTime: sessionData.endTime,
-      monthlyDates: sessionData.monthlyDates,
-      numberOfWeeks: sessionData.numberOfWeeks,
-      startDate: sessionData.startDate,
-      recurringDays: sessionData.recurringDays,
-      location: sessionData.location,
-      groupType: sessionData.groupType
-    });
-    
-    return canProceedResult;
-  };
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handlePrevious} style={{ marginRight: 12 }}>
-            <ChevronLeft size={24} color="#9ca3af" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Create Session</Text>
-          <View style={{ width: 24 }} />
-        </View>
-
-        {/* Progress Indicator */}
-        <View style={styles.progressRow}>
-          {[1, 2, 3, 4].map((step) => (
-            <React.Fragment key={step}>
-              <View
+        {currentStep === 2 && sessionType === 'recurring' && (
+          <>
+            {/* Frequency Selection */}
+            <Text style={styles.label}>Frequency</Text>
+            <View style={styles.buttonGroup}>
+              <TouchableOpacity
                 style={[
-                  styles.progressCircle,
-                  currentStep >= step ? styles.progressCircleActive : styles.progressCircleInactive,
+                  styles.sessionButton,
+                  frequency === 'weekly' && styles.sessionButtonSelected,
                 ]}
+                onPress={() => {
+                  setFrequency('weekly');
+                  setSelectedDays([]); // Clear monthly dates when switching to weekly
+                  setDayTimes({}); // Clear monthly time slots when switching to weekly
+                }}
               >
-                <Text style={currentStep >= step ? styles.progressCircleTextActive : styles.progressCircleTextInactive}>
-                  {step}
+                <Text
+                  style={
+                    frequency === 'weekly'
+                      ? styles.sessionButtonTextSelected
+                      : styles.sessionButtonText
+                  }
+                >
+                  Weekly
                 </Text>
-              </View>
-              {step < 4 && (
-                <View
-                  style={[
-                    styles.progressBar,
-                    currentStep > step ? styles.progressBarActive : styles.progressBarInactive,
-                  ]}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.sessionButton,
+                  frequency === 'monthly' && styles.sessionButtonSelected,
+                ]}
+                onPress={() => {
+                  setFrequency('monthly');
+                  setSelectedDays([]); // Clear weekly days when switching to monthly
+                  setDayTimes({}); // Clear weekly time slots when switching to monthly
+                }}
+              >
+                <Text
+                  style={
+                    frequency === 'monthly'
+                      ? styles.sessionButtonTextSelected
+                      : styles.sessionButtonText
+                  }
+                >
+                  Monthly
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Weekly Frequency: Day Selection */}
+            {frequency === 'weekly' && (
+              <>
+                <Text style={styles.label}>Select Days of the Week</Text>
+                <View style={styles.dayButtonGroup}>
+                  {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(
+                    (day) => (
+                      <TouchableOpacity
+                        key={day}
+                        style={[
+                          styles.dayButton,
+                          selectedDays.includes(day) && styles.dayButtonSelected,
+                        ]}
+                        onPress={() => handleDaySelection(day)}
+                      >
+                        <Text
+                          style={[
+                            styles.dayButtonText,
+                            selectedDays.includes(day) && styles.dayButtonTextSelected,
+                          ]}
+                        >
+                          {day}
+                        </Text>
+                      </TouchableOpacity>
+                    )
+                  )}
+                </View>
+
+                {/* Time Sliders for Selected Days */}
+                {selectedDays.map((day) => (
+                  <View key={day} style={{ marginBottom: 20 }}>
+                    <Text style={styles.label}>Time for {day}</Text>
+                    <Text style={styles.timeDisplay}>
+                      {timeSlots[dayTimes[day]?.[0] || 0]} - {timeSlots[dayTimes[day]?.[1] || 1]}
+                    </Text>
+                    <View style={{ alignItems: 'flex-start' }}>
+                      <MultiSlider
+                        values={dayTimes[day] || [0, 1]}
+                        min={0}
+                        max={timeSlots.length - 1}
+                        step={1}
+                        sliderLength={width - 40}
+                        onValuesChange={(values) => handleDayTimeChange(day, values as [number, number])}
+                        selectedStyle={{ backgroundColor: '#fb923c' }}
+                        unselectedStyle={{ backgroundColor: '#374151' }}
+                        containerStyle={{ marginVertical: 20 }}
+                        trackStyle={{ height: 4, borderRadius: 2 }}
+                        markerStyle={{
+                          backgroundColor: '#fb923c',
+                          height: 20,
+                          width: 20,
+                          borderRadius: 10,
+                          borderWidth: 2,
+                          borderColor: '#fff',
+                        }}
+                      />
+                    </View>
+                  </View>
+                ))}
+
+                {/* Number of Weeks Slider */}
+                <Text style={styles.label}>Number of Weeks</Text>
+                <Text style={styles.weekDisplay}>{numberOfWeeks} Week(s)</Text>
+                <View style={{ alignItems: 'flex-start' }}>
+                  <MultiSlider
+                    values={[numberOfWeeks]}
+                    min={1}
+                    max={20}
+                    step={1}
+                    sliderLength={width - 40}
+                    onValuesChange={(values) => setNumberOfWeeks(values[0])}
+                    selectedStyle={{ backgroundColor: '#fb923c' }}
+                    unselectedStyle={{ backgroundColor: '#374151' }}
+                    containerStyle={{ marginVertical: 20 }}
+                    trackStyle={{ height: 4, borderRadius: 2 }}
+                    markerStyle={{
+                      backgroundColor: '#fb923c',
+                      height: 20,
+                      width: 20,
+                      borderRadius: 10,
+                      borderWidth: 2,
+                      borderColor: '#fff',
+                    }}
+                  />
+                </View>
+
+                {/* Start Date Input */}
+                <Text style={styles.label}>Start Date (YYYY-MM-DD)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter Start Date"
+                  placeholderTextColor="#9ca3af"
+                  value={startDate}
+                  onChangeText={(text) => setStartDate(text)}
                 />
-              )}
-            </React.Fragment>
-          ))}
-        </View>
 
-        {/* Step Content */}
-        <ScrollView 
-          style={styles.scrollContainer}
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
-          {currentStep === 1 && renderStep1()}
-          {currentStep === 2 && renderStep2()}
-          {currentStep === 3 && renderStep3()}
-          {currentStep === 4 && renderStep4()}
-        </ScrollView>
+                {/* Validate Start Date Button */}
+                <TouchableOpacity
+                  style={styles.validateButton}
+                  onPress={() => {
+                    const isValid = validateStartDate(startDate);
+                    if (!isValid) {
+                      Alert.alert(
+                        'Invalid Start Date',
+                        'Please ensure the date is valid and matches the selected days.'
+                      );
+                    } else {
+                      Alert.alert('Valid Start Date', 'The start date is valid.');
+                    }
+                  }}
+                >
+                  <Text style={styles.validateButtonText}>Validate Start Date</Text>
+                </TouchableOpacity>
+              </>
+            )}
 
-        {/* Navigation Buttons */}
-        <View style={styles.bottomButtons}>
-          {currentStep > 1 && (
-            <TouchableOpacity
-              style={[styles.navBtn, styles.navBtnGray]}
-              onPress={handlePrevious}
-            >
-              <Text style={styles.navBtnText}>Previous</Text>
-            </TouchableOpacity>
-          )}
+            {/* Monthly Frequency: Date Selection */}
+            {frequency === 'monthly' && (
+              <>
+                <Text style={styles.label}>Select Dates for This Month</Text>
+                <Calendar
+                  onDayPress={(day) => {
+                    const today = new Date();
+                    const selectedDate = new Date(day.dateString);
+
+                    // Ensure the selected date is in the current month and past the current date
+                    if (
+                      selectedDate.getMonth() === today.getMonth() &&
+                      selectedDate.getFullYear() === today.getFullYear() &&
+                      selectedDate > today
+                    ) {
+                      setSelectedDays((prevSelectedDays) => {
+                        if (prevSelectedDays.includes(day.dateString)) {
+                          return prevSelectedDays.filter((selectedDay) => selectedDay !== day.dateString);
+                        } else {
+                          return [...prevSelectedDays, day.dateString];
+                        }
+                      });
+                    } else {
+                      Alert.alert(
+                        'Invalid Date',
+                        'Please select a date from the current month and past today.'
+                      );
+                    }
+                  }}
+                  markedDates={selectedDays.reduce((acc, date) => {
+                    (acc as Record<string, { selected: boolean; marked: boolean; selectedColor: string }>)[
+                      date
+                    ] = { selected: true, marked: true, selectedColor: '#fb923c' };
+                    return acc;
+                  }, {})}
+                  theme={{
+                    calendarBackground: '#18181b',
+                    textSectionTitleColor: '#d1d5db',
+                    selectedDayBackgroundColor: '#fb923c',
+                    selectedDayTextColor: '#fff',
+                    todayTextColor: '#fb923c',
+                    dayTextColor: '#d1d5db',
+                    arrowColor: '#fb923c',
+                    monthTextColor: '#fff',
+                  }}
+                  hideExtraDays={true} // Hides dates from previous and next months
+                  minDate={new Date().toISOString().split('T')[0]} // Restrict dates to today and onward
+                />
+
+                {/* Time Sliders for Selected Dates */}
+                {selectedDays.map((date) => (
+                  <View key={date} style={{ marginBottom: 20 }}>
+                    <Text style={styles.label}>Time for {date}</Text>
+                    <Text style={styles.timeDisplay}>
+                      {timeSlots[dayTimes[date]?.[0] || 0]} - {timeSlots[dayTimes[date]?.[1] || 1]}
+                    </Text>
+                    <View style={{ alignItems: 'flex-start' }}>
+                      <MultiSlider
+                        values={dayTimes[date] || [0, 1]}
+                        min={0}
+                        max={timeSlots.length - 1}
+                        step={1}
+                        sliderLength={width - 40}
+                        onValuesChange={(values) =>
+                          setDayTimes((prevDayTimes) => ({
+                            ...prevDayTimes,
+                            [date]: values as [number, number],
+                          }))
+                        }
+                        selectedStyle={{ backgroundColor: '#fb923c' }}
+                        unselectedStyle={{ backgroundColor: '#374151' }}
+                        containerStyle={{ marginVertical: 20 }}
+                        trackStyle={{ height: 4, borderRadius: 2 }}
+                        markerStyle={{
+                          backgroundColor: '#fb923c',
+                          height: 20,
+                          width: 20,
+                          borderRadius: 10,
+                          borderWidth: 2,
+                          borderColor: '#fff',
+                        }}
+                      />
+                    </View>
+                  </View>
+                ))}
+              </>
+            )}
+          </>
+        )}
+
+        {currentStep === 3 && (sessionType === 'single' || sessionType === 'recurring') && (
+          <>
+            {/* Address Field */}
+            <Text style={styles.label}>Address (do not enter postal code here)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter Address"
+              placeholderTextColor="#9ca3af"
+              value={address}
+              onChangeText={(text) => setAddress(text)}
+            />
+
+            {/* Postal Code Input */}
+            <Text style={styles.label}>Postal Code</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter Postal Code"
+              placeholderTextColor="#9ca3af"
+              keyboardType="numeric"
+              value={postalCode}
+              onChangeText={handlePostalCodeChange}
+            />
+
+            {/* Class Type Selection */}
+            <Text style={styles.label}>Class Type</Text>
+            <View style={styles.buttonGroup}>
+              <TouchableOpacity
+                style={[
+                  styles.sessionButton,
+                  classType === 'single' && styles.sessionButtonSelected,
+                ]}
+                onPress={() => setClassType('single')}
+              >
+                <Text
+                  style={
+                    classType === 'single'
+                      ? styles.sessionButtonTextSelected
+                      : styles.sessionButtonText
+                  }
+                >
+                  Single Class
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.sessionButton,
+                  classType === 'group' && styles.sessionButtonSelected,
+                ]}
+                onPress={() => setClassType('group')}
+              >
+                <Text
+                  style={
+                    classType === 'group'
+                      ? styles.sessionButtonTextSelected
+                      : styles.sessionButtonText
+                  }
+                >
+                  Group Class
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Group Size Slider */}
+            {classType === 'group' && (
+              <>
+                <Text style={styles.label}>Group Size: {groupSize} students</Text>
+                <MultiSlider
+                  values={[groupSize]}
+                  min={2}
+                  max={20}
+                  step={1}
+                  sliderLength={width - 40}
+                  onValuesChange={(values) => setGroupSize(values[0])}
+                  selectedStyle={{ backgroundColor: '#fb923c' }}
+                  unselectedStyle={{ backgroundColor: '#374151' }}
+                  containerStyle={{ marginVertical: 20 }}
+                  trackStyle={{ height: 4, borderRadius: 2 }}
+                  markerStyle={{
+                    backgroundColor: '#fb923c',
+                    height: 20,
+                    width: 20,
+                    borderRadius: 10,
+                    borderWidth: 2,
+                    borderColor: '#fff',
+                  }}
+                />
+              </>
+            )}
+          </>
+        )}
+
+        {currentStep === 4 && sessionType === 'single' && (
+          <>
+            {/* Price Per Session Input */}
+            <Text style={styles.label}>Price Per Session ($)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter Price (e.g., 20.00)"
+              placeholderTextColor="#9ca3af"
+              keyboardType="numeric"
+              value={pricePerSession}
+              onChangeText={(text) => setPricePerSession(text)}
+            />
+
+            {/* Description Input */}
+            <Text style={styles.label}>Description</Text>
+            <TextInput
+              style={[styles.input, { height: 100 }]} // Larger text box for description
+              placeholder="What can your students expect?"
+              placeholderTextColor="#9ca3af"
+              multiline
+              value={description}
+              onChangeText={(text) => setDescription(text)}
+            />
+
+            {/* Summary Box */}
+            <View style={styles.summaryBox}>
+              <Text style={styles.summaryTitle}>Summary</Text>
+              <Text style={styles.summaryText}>Sport: {selectedSport || 'N/A'}</Text>
+              <Text style={styles.summaryText}>Session Type: {sessionType}</Text>
+              <Text style={styles.summaryText}>
+                Age Range: {ageRange[0]} - {ageRange[1]} years
+              </Text>
+              <Text style={styles.summaryText}>Postal Code: {postalCode || 'N/A'}</Text>
+              <Text style={styles.summaryText}>Address: {address || 'N/A'}</Text>
+              <Text style={styles.summaryText}>
+                Class Type: {classType} {classType === 'group' ? `(Max Students: ${groupSize})` : ''}
+              </Text>
+              <Text style={styles.summaryText}>Date: {sessionDate || 'N/A'}</Text>
+              <Text style={styles.summaryText}>Price Per Session: ${pricePerSession || 'N/A'}</Text>
+              <Text style={styles.summaryText}>
+                Description: {description || 'No description provided'}
+              </Text>
+            </View>
+          </>
+        )}
+
+        {currentStep === 4 && sessionType === 'recurring' && (
+          <>
+            {frequency === 'weekly' && (
+              <>
+                <Text style={styles.label}>Price Per Session for Each Day</Text>
+                {selectedDays.map((day) => (
+                  <View key={day} style={{ marginBottom: 20 }}>
+                    <Text style={styles.label}>{day}</Text>
+                    <Text style={styles.timeDisplay}>
+                      Duration: {formatDuration(calculateDuration(timeSlots[dayTimes[day]?.[0]], timeSlots[dayTimes[day]?.[1]]))}
+                    </Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder={`Enter Price for ${day}`}
+                      placeholderTextColor="#9ca3af"
+                      keyboardType="numeric"
+                      value={dayPrices[day] || ''}
+                      onChangeText={(text) =>
+                        setDayPrices((prevPrices) => ({
+                          ...prevPrices,
+                          [day]: text,
+                        }))
+                      }
+                    />
+                  </View>
+                ))}
+
+                {/* Description Box */}
+                <Text style={styles.label}>Description</Text>
+                <TextInput
+                  style={[styles.input, { height: 100 }]} // Larger text box for description
+                  placeholder="Provide a description for your weekly sessions"
+                  placeholderTextColor="#9ca3af"
+                  multiline
+                  value={description}
+                  onChangeText={(text) => setDescription(text)}
+                />
+
+                {/* Summary Box */}
+                <View style={styles.summaryBox}>
+                  <Text style={styles.summaryTitle}>Weekly Session Summary</Text>
+                  <Text style={styles.summaryText}>Sport: {selectedSport || 'N/A'}</Text>
+                  <Text style={styles.summaryText}>Session Type: Recurring (Weekly)</Text>
+                  <Text style={styles.summaryText}>
+                    Age Range: {ageRange[0]} - {ageRange[1]} years
+                  </Text>
+                  <Text style={styles.summaryText}>Postal Code: {postalCode || 'N/A'}</Text>
+                  <Text style={styles.summaryText}>Address: {address || 'N/A'}</Text>
+                  <Text style={styles.summaryText}>Class Type: {classType}</Text>
+                  {classType === 'group' && (
+                    <Text style={styles.summaryText}>Max Students: {groupSize}</Text>
+                  )}
+                  <Text style={styles.summaryText}>Number of Weeks: {numberOfWeeks}</Text>
+                  <Text style={styles.summaryText}>Start Date: {startDate || 'N/A'}</Text>
+                  <Text style={styles.summaryText}>Selected Days:</Text>
+                  {selectedDays.map((day) => (
+                    <Text key={day} style={styles.summaryText}>
+                      - {day}: {timeSlots[dayTimes[day]?.[0]]} - {timeSlots[dayTimes[day]?.[1]]}, Price: ${dayPrices[day] || 'N/A'}
+                    </Text>
+                  ))}
+                  <Text style={styles.summaryText}>
+                    Description: {description || 'No description provided'}
+                  </Text>
+                </View>
+              </>
+            )}
+
+            {frequency === 'monthly' && (
+              <>
+                <Text style={styles.label}>Price Per Session for Each Date</Text>
+                {selectedDays.map((date) => (
+                  <View key={date} style={{ marginBottom: 20 }}>
+                    <Text style={styles.label}>{date}</Text>
+                    <Text style={styles.timeDisplay}>
+                      Duration: {formatDuration(calculateDuration(timeSlots[dayTimes[date]?.[0]], timeSlots[dayTimes[date]?.[1]]))}
+                    </Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder={`Enter Price for ${date}`}
+                      placeholderTextColor="#9ca3af"
+                      keyboardType="numeric"
+                      value={datePrices[date] || ''}
+                      onChangeText={(text) =>
+                        setDatePrices((prevPrices) => ({
+                          ...prevPrices,
+                          [date]: text,
+                        }))
+                      }
+                    />
+                  </View>
+                ))}
+
+                {/* Description Box */}
+                <Text style={styles.label}>Description</Text>
+                <TextInput
+                  style={[styles.input, { height: 100 }]} // Larger text box for description
+                  placeholder="Provide a description for your monthly sessions"
+                  placeholderTextColor="#9ca3af"
+                  multiline
+                  value={description}
+                  onChangeText={(text) => setDescription(text)}
+                />
+
+                {/* Summary Box */}
+                <View style={styles.summaryBox}>
+                  <Text style={styles.summaryTitle}>Monthly Session Summary</Text>
+                  <Text style={styles.summaryText}>Sport: {selectedSport || 'N/A'}</Text>
+                  <Text style={styles.summaryText}>Session Type: Recurring (Monthly)</Text>
+                  <Text style={styles.summaryText}>
+                    Age Range: {ageRange[0]} - {ageRange[1]} years
+                  </Text>
+                  <Text style={styles.summaryText}>Postal Code: {postalCode || 'N/A'}</Text>
+                  <Text style={styles.summaryText}>Address: {address || 'N/A'}</Text>
+                  <Text style={styles.summaryText}>Class Type: {classType}</Text>
+                  {classType === 'group' && (
+                    <Text style={styles.summaryText}>Max Students: {groupSize}</Text>
+                  )}
+                  <Text style={styles.summaryText}>Selected Dates:</Text>
+                  {selectedDays.map((date) => (
+                    <Text key={date} style={styles.summaryText}>
+                      - {date}: {timeSlots[dayTimes[date]?.[0]]} - {timeSlots[dayTimes[date]?.[1]]}, Price: ${datePrices[date] || 'N/A'}
+                    </Text>
+                  ))}
+                  <Text style={styles.summaryText}>
+                    Description: {description || 'No description provided'}
+                  </Text>
+                </View>
+              </>
+            )}
+          </>
+        )}
+      </ScrollView>
+
+      
+
+      {/* Navigation Buttons */}
+      <View style={styles.bottomButtons}>
+        {currentStep > 1 && (
+          <TouchableOpacity
+            style={[styles.navBtn, styles.navBtnGray, styles.navBtnAdjusted]} // Previous button styling
+            onPress={() => setCurrentStep(currentStep - 1)}
+          >
+            <Text style={styles.navBtnText}>Previous</Text>
+          </TouchableOpacity>
+        )}
+        {currentStep === 4 ? (
           <TouchableOpacity
             style={[
               styles.navBtn,
-              styles.navBtnOrange,
-              !canProceed() && { opacity: 0.5 }
+              // Validation logic for different session types
+              sessionType === 'single' 
+                ? (!pricePerSession || !description) ? styles.navBtnDisabled : styles.navBtnOrange
+                : sessionType === 'recurring' && frequency === 'weekly'
+                ? (!validateWeeklySessionFields()) ? styles.navBtnDisabled : styles.navBtnOrange
+                : sessionType === 'recurring' && frequency === 'monthly'
+                ? (!validateMonthlySessionFields()) ? styles.navBtnDisabled : styles.navBtnOrange
+                : styles.navBtnDisabled, // For other types
             ]}
-            onPress={currentStep === 4 ? handleSubmit : handleNext}
-            disabled={!canProceed()}
-            activeOpacity={0.8}
+            onPress={handleCreateSession}
+            disabled={
+              sessionType === 'single' 
+                ? (!pricePerSession || !description)
+                : sessionType === 'recurring' && frequency === 'weekly'
+                ? (!validateWeeklySessionFields())
+                : sessionType === 'recurring' && frequency === 'monthly'
+                ? (!validateMonthlySessionFields())
+                : true // Disable for other types
+            }
           >
-            <Text style={styles.navBtnText}>{currentStep === 4 ? 'Create Session' : 'Next'}</Text>
+            <Text style={[
+              styles.navBtnText,
+              (sessionType === 'recurring' && (frequency === 'weekly' || frequency === 'monthly')) && styles.navBtnTextLong
+            ]}>
+              {sessionType === 'single' 
+                ? 'Create Session' 
+                : sessionType === 'recurring' && frequency === 'weekly'
+                ? 'Create Weekly Sessions'
+                : sessionType === 'recurring' && frequency === 'monthly'
+                ? 'Create Monthly Sessions'
+                : 'Create Session'}
+            </Text>
           </TouchableOpacity>
-        </View>
-
-        {/* Bottom Navigation */}
-        <View style={styles.bottomNav}>
-          <TouchableOpacity style={styles.navTabBtn}>
-            <View style={styles.navIconPlaceholder} />
+        ) : (
+          <TouchableOpacity
+            style={[
+              styles.navBtn,
+              currentStep === 1 && (!selectedSport || !sessionType)
+                ? styles.navBtnDisabled
+                : currentStep === 2 && sessionType === 'single' && (sessionTime[0] === sessionTime[1] || !sessionDate)
+                ? styles.navBtnDisabled
+                : currentStep === 2 && sessionType === 'recurring' && (
+                  (frequency === 'weekly' && (selectedDays.length === 0 || numberOfWeeks <= 0 || !startDate || !validateStartDate(startDate))) ||
+                  (frequency === 'monthly' && (selectedDays.length === 0 ))
+                )
+                ? styles.navBtnDisabled
+                : currentStep === 3 && (!address || !postalCode || !classType || (classType === 'group' && groupSize <= 0))
+                ? styles.navBtnDisabled
+                : styles.navBtnOrange,
+              styles.navBtnAdjusted,
+            ]}
+            onPress={() => {
+              if (
+                (currentStep === 1 && selectedSport && sessionType && ageRange.length > 0) ||
+                (currentStep === 2 && sessionType === 'single' && sessionTime[0] !== sessionTime[1] && sessionDate) ||
+                (currentStep === 2 && sessionType === 'recurring' && (
+                  (frequency === 'weekly' && selectedDays.length > 0 && numberOfWeeks > 0 && startDate && validateStartDate(startDate)) ||
+                  (frequency === 'monthly' && selectedDays.length > 0 )
+                )) ||
+                (currentStep === 3 && address && postalCode && classType && (classType !== 'group' || groupSize > 0))
+              ) {
+                setCurrentStep(currentStep + 1); // Navigate to the next step
+              }
+            }}
+            disabled={
+              currentStep === 1 && (!selectedSport || !sessionType) ||
+              currentStep === 2 && sessionType === 'single' && (sessionTime[0] === sessionTime[1] || !sessionDate) ||
+              currentStep === 2 && sessionType === 'recurring' && (
+                (frequency === 'weekly' && (selectedDays.length === 0 || numberOfWeeks <= 0 || !startDate || !validateStartDate(startDate))) ||
+                (frequency === 'monthly' && (selectedDays.length === 0 ))
+              ) ||
+              currentStep === 3 && (!address || !postalCode || !classType || (classType === 'group' && groupSize <= 0))
+            }
+          >
+            <Text style={styles.navBtnText}>Next</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.navTabBtn}>
-            <View style={styles.navIconPlaceholder} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navTabBtn}>
-            <View style={styles.navIconPlaceholder} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navTabBtn}>
-            <View style={styles.navIconPlaceholder} />
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
+        )}
+      </View>
     </SafeAreaView>
   );
 };
@@ -919,327 +1395,85 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#18181b',
   },
-  navTabBtn: {
+  stageIndicator: {
+    flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 8,
+    marginVertical: 20,
   },
-  navIconPlaceholder: {
-    borderRadius: 4,
-    backgroundColor: '#9ca3af',
-    height: 24,
-    width: 24,
-  },
-  sessionPill: {
-    minWidth: 80,
-    alignItems: 'center',
-    marginRight: 10,
-    padding: 10,
-    borderRadius: 8,
-    backgroundColor: '#fed7aa',
-  },
-  sessionPillDate: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#fb923c',
-    marginBottom: 2,
-  },
-  sessionPillTime: {
-    fontSize: 13,
-    color: '#18181b',
-    marginBottom: 2,
-  },
-  sessionPillTitle: {
-    fontSize: 12,
-    color: '#18181b',
-  },
-  header: {
+  stageCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#27272a',
-    paddingVertical: 18,
-    borderBottomWidth: 1,
-    borderBottomColor: '#374151',
-    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    marginHorizontal: 10,
   },
-  headerTitle: {
-    color: '#fff',
-    fontSize: 20,
+  stageCircleActive: {
+    backgroundColor: '#fb923c',
+  },
+  stageText: {
+    color: '#d1d5db',
+    fontSize: 16,
     fontWeight: 'bold',
-    flex: 1,
-    textAlign: 'center',
   },
-  scrollContainer: {
-    flex: 1,
+  stageTextActive: {
+    color: '#fff',
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  stepContainer: {
-    marginTop: 24,
-    marginBottom: 12,
-  },
-  stepTitle: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 18,
+    padding: 20,
   },
   label: {
-    color: '#d1d5db',
-    fontSize: 14,
-    marginBottom: 6,
-    marginTop: 12,
-  },
-  input: {
-    backgroundColor: '#27272a',
-    borderColor: '#374151',
-    borderWidth: 1,
-    borderRadius: 8,
+    fontSize: 16,
+    fontWeight: 'bold',
     color: '#fff',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-    marginBottom: 8,
-  },
-  dropdownButton: {
-    backgroundColor: '#27272a',
-    borderColor: '#374151',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  dropdownText: {
-    color: '#fff',
-    fontSize: 15,
-  },
-  dropdownPlaceholder: {
-    color: '#9ca3af',
-    fontSize: 15,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  dropdownModal: {
-    backgroundColor: '#27272a',
-    borderRadius: 10,
-    padding: 16,
-    width: width * 0.8,
-    maxHeight: 320,
-  },
-  dropdownOption: {
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#374151',
-  },
-  row: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 8,
-  },
-  typeButton: {
-    flex: 1,
-    backgroundColor: '#27272a',
-    borderColor: '#374151',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginRight: 8,
-  },
-  typeButtonActive: {
-    backgroundColor: '#fb923c',
-    borderColor: '#fb923c',
-  },
-  typeButtonText: {
-    color: '#9ca3af',
-    fontWeight: '600',
-    fontSize: 15,
-  },
-  typeButtonTextActive: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 15,
-  },
-  sliderContainer: {
-    paddingVertical: 20,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-  },
-  daysContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 8,
-  },
-  dayButton: {
-    backgroundColor: '#27272a',
-    borderColor: '#374151',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    minWidth: 45,
-    alignItems: 'center',
-  },
-  dayButtonActive: {
-    backgroundColor: '#fb923c',
-    borderColor: '#fb923c',
-  },
-  dayButtonText: {
-    color: '#9ca3af',
-    fontWeight: '600',
-    fontSize: 12,
-  },
-  dayButtonTextActive: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 12,
-  },
-  calendarCard: {
-    backgroundColor: '#27272a',
-    borderRadius: 12,
-    paddingVertical: 24, // increase vertical padding
-    paddingHorizontal: 32, // increase horizontal padding
-    marginVertical: 16,
-    width: gridWidth + 40, // increase width for a larger backing
-    // alignSelf: 'center',
-    // marginHorizontal: 'auto',
-},
-  monthNav: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     marginBottom: 12,
   },
-  monthNavBtn: {
-    padding: 8,
-    borderRadius: 8,
-  },
-  monthLabel: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  daysOfWeekRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  dayOfWeekText: {
-    color: '#9ca3af',
-    fontSize: 12,
-    fontWeight: '600',
-    width: (width - 64) / 7,
-    textAlign: 'center',
-  },
-  calendarGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    width: '100%', // fill the card
-    minHeight: 240,
-  },
-  calendarEmptyCell: {
-    flex: 1, // take up 1/7th of the row
-    height: 40,
-    padding: 6,
-    paddingHorizontal: 10,
-    maxWidth: 48,
-},
-  calendarDay: {
-    flex: 1, // take up 1/7th of the row
-    height: 40,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-    padding: 6,
-    paddingHorizontal: 10,
-    maxWidth: 48, // prevent cells from getting too wide
-},
-  calendarDaySelected: {
-    backgroundColor: '#fb923c',
-  },
-  calendarDayText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#9ca3af',
-  },
-  summaryCard: {
+  dropdownButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     backgroundColor: '#27272a',
-    borderRadius: 10,
-    padding: 16,
-    marginTop: 18,
+    borderRadius: 8,
+    marginBottom: 20,
   },
-  summaryTitle: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
-    marginBottom: 10,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  summaryLabel: {
-    color: '#9ca3af',
+  dropdownButtonText: {
+    color: '#d1d5db',
     fontSize: 14,
   },
-  summaryValue: {
-    color: '#fff',
+  buttonGroup: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 20,
+  },
+  sessionButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#27272a',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sessionButtonSelected: {
+    backgroundColor: '#fb923c',
+  },
+  sessionButtonText: {
+    color: '#d1d5db',
     fontSize: 14,
   },
-  progressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginVertical: 18,
-    gap: 0,
-  },
-  progressCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  progressCircleActive: {
-    backgroundColor: '#fb923c',
-  },
-  progressCircleInactive: {
-    backgroundColor: '#374151',
-  },
-  progressCircleTextActive: {
+  sessionButtonTextSelected: {
     color: '#fff',
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: 'bold',
   },
-  progressCircleTextInactive: {
-    color: '#9ca3af',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  progressBar: {
-    height: 2,
-    width: 24,
-    marginHorizontal: 4,
-  },
-  progressBarActive: {
-    backgroundColor: '#fb923c',
-  },
-  progressBarInactive: {
-    backgroundColor: '#374151',
+  input: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#27272a',
+    borderRadius: 8,
+    color: '#fff',
+    fontSize: 14,
+    marginBottom: 20,
   },
   bottomButtons: {
     flexDirection: 'row',
@@ -1258,11 +1492,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     minHeight: 48,
+    marginBottom: 100
   },
   navBtnText: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#fff',
+  },
+  navBtnTextLong: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#fff',
+    textAlign: 'center',
+    lineHeight: 20,
+    paddingHorizontal: 8,
   },
   navBtnOrange: {
     backgroundColor: '#fb923c',
@@ -1270,31 +1513,122 @@ const styles = StyleSheet.create({
   navBtnGray: {
     backgroundColor: '#374151',
   },
-  bottomNav: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: '#27272a',
-    borderTopWidth: 1,
-    borderTopColor: '#374151',
+  navBtnDisabled: {
+    backgroundColor: '#6b7280', // Dimmed color for disabled button
   },
-  timeSliderContainer: {
-    paddingVertical: 20,
-    paddingHorizontal: 10,
+  navBtnAdjusted: {
+    position: 'relative',
+    bottom: 0,
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+  },
+  modalContent: {
+    width: width - 40,
+    backgroundColor: '#27272a',
+    borderRadius: 8,
+    padding: 20,
+  },
+  modalItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#374151',
+  },
+  modalItemText: {
+    color: '#d1d5db',
+    fontSize: 14,
+  },
+  modalCloseButton: {
+    marginTop: 20,
+    paddingVertical: 12,
+    backgroundColor: '#fb923c',
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  modalCloseButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  summaryBox: {
+    backgroundColor: '#27272a',
+    borderRadius: 8,
+    padding: 20,
+    marginTop: 20,
+  },
+  summaryTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
     marginBottom: 12,
   },
-  timeLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-    marginTop: 10,
+  summaryText: {
+    fontSize: 14,
+    color: '#d1d5db',
+    marginBottom: 8,
   },
-  timeLabel: {
-    color: '#9ca3af',
-    fontSize: 12,
+  dayButtonGroup: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12, // Increased spacing between buttons
+    marginBottom: 20,
+    justifyContent: 'flex-start', // Align buttons to the left
+  },
+  dayButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#27272a',
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1, // Added border for better visibility
+    borderColor: '#374151',
+    minWidth: 100, // Ensures consistent button size
+  },
+  dayButtonSelected: {
+    backgroundColor: '#fb923c',
+    borderColor: '#fb923c', // Matches border color with background
+  },
+  dayButtonText: {
+    color: '#d1d5db',
+    fontSize: 14,
+    fontWeight: '500', // Slightly bold text for better readability
+  },
+  dayButtonTextSelected: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  timeDisplay: {
+    color: '#d1d5db',
+    fontSize: 14,
+    marginBottom: 8,
+    textAlign: 'left', // Align text to the left
+  },
+  weekDisplay: {
+    color: '#d1d5db',
+    fontSize: 14,
+    marginBottom: 8,
+    textAlign: 'left', // Align text to the left
+  },
+  validateButton: {
+    marginTop: 20,
+    paddingVertical: 12,
+    backgroundColor: '#fb923c',
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  validateButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 });
 
 export default CoachCreateSessionPage;
+
+
+

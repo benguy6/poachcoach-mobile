@@ -34,7 +34,6 @@ const CoachProfilePage: React.FC<CoachProfilePageProps> = ({ onProfilePicChange 
   useEffect(() => {
     const fetchCoachProfile = async () => {
       try {
-        // Retrieve token dynamically using Supabase
         const { data: sessionData, error } = await supabase.auth.getSession();
         const token = sessionData.session?.access_token;
 

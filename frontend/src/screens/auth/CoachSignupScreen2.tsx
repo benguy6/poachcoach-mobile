@@ -1,5 +1,3 @@
-
-
 import React, { useState } from "react";
 import {
   View,
@@ -12,13 +10,15 @@ import {
   Platform,
   FlatList,
   StyleSheet,
+  ActivityIndicator,
 } from "react-native";
 import Checkbox from "expo-checkbox";
 import DropDownPicker from "react-native-dropdown-picker";
 import Slider from "@react-native-community/slider";
+import * as DocumentPicker from 'expo-document-picker';
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { supabase } from "../../services/supabase";
-import { registerCoach } from "../../services/api";
+import { registerCoach, uploadQualificationsPDF, saveQualifications } from "../../services/api";
 
 export default function CoachSignupScreen2() {
   const navigation = useNavigation<any>();
@@ -29,7 +29,8 @@ export default function CoachSignupScreen2() {
   const [last_Name, setLastName] = useState("");
   const [postal_code, setPostalCode] = useState("");
   const [number, setNumber] = useState("");
-  const [qualifications, setQualifications] = useState(""); 
+  const [uploadedQualifications, setUploadedQualifications] = useState<{url: string, fileName: string}[]>([]);
+  const [isUploadingPDF, setIsUploadingPDF] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   const [gender, setGender] = useState("Male");
@@ -49,6 +50,44 @@ export default function CoachSignupScreen2() {
     { label: "Football", value: "Football" },
     { label: "Tennis", value: "Tennis" },
   ]);
+
+const handlePDFUpload = async () => {
+  try {
+    setIsUploadingPDF(true);
+    
+    const result = await DocumentPicker.getDocumentAsync({
+      type: 'application/pdf',
+      copyToCacheDirectory: true,
+    });
+
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      const asset = result.assets[0];
+      
+      // Validate file size (5MB limit)
+      if (asset.size && asset.size > 5 * 1024 * 1024) {
+        Alert.alert('File Too Large', 'Please select a PDF file smaller than 5MB.');
+        return;
+      }
+
+      // We don't need coach ID for upload anymore, just upload the file
+      // Upload the PDF
+      const pdfUrl = await uploadQualificationsPDF(asset.uri, asset.name);
+      
+      // Add to uploaded qualifications array
+      setUploadedQualifications(prev => [...prev, {
+        url: pdfUrl,
+        fileName: asset.name
+      }]);
+      
+      Alert.alert('Success', 'PDF uploaded successfully!');
+    }
+  } catch (error: any) {
+    console.error('PDF upload error:', error);
+    Alert.alert('Upload Failed', error.message || 'Failed to upload PDF');
+  } finally {
+    setIsUploadingPDF(false);
+  }
+};
 
 const handleSubmit = async () => {
   if (!acceptedTerms) {
@@ -75,10 +114,15 @@ const handleSubmit = async () => {
         age,
         gender,
         sport,
-        qualifications,
         number,
         postal_code,
       });
+
+      // Save qualifications to database if any were uploaded
+      if (uploadedQualifications.length > 0) {
+        const qualificationUrls = uploadedQualifications.map(q => q.url);
+        await saveQualifications(userId, qualificationUrls);
+      }
     }
 
     // ✅ Always show success alert and navigate to login
@@ -201,23 +245,57 @@ const handleSubmit = async () => {
                   keyboardType="numeric"
                 />
 
-                <Text style={styles.label}>Achievements & Qualifications</Text>
-                <TextInput
-                  placeholder="e.g. Degree in Sports Science"
-                  style={[styles.input, { height: 80 }]}
-                  value={qualifications}
-                  onChangeText={setQualifications}
-                  multiline
-                />
+                <Text style={styles.label}>Achievements & Qualifications (PDF)</Text>
+                
+                <TouchableOpacity
+                  style={[
+                    styles.pdfUploadButton,
+                    uploadedQualifications.length > 0 ? styles.pdfUploadButtonSuccess : {},
+                    isUploadingPDF ? styles.pdfUploadButtonDisabled : {}
+                  ]}
+                  onPress={handlePDFUpload}
+                  disabled={isUploadingPDF}
+                >
+                  {isUploadingPDF ? (
+                    <View style={styles.uploadingContainer}>
+                      <ActivityIndicator size="small" color="#fff" />
+                      <Text style={styles.pdfUploadButtonText}>Uploading...</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.pdfUploadButtonText}>
+                      {uploadedQualifications.length > 0 ? `Add Another PDF (${uploadedQualifications.length} uploaded)` : 'Select PDF File'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
 
-                <View style={styles.checkboxRow}>
-                  <Checkbox value={acceptedTerms} onValueChange={setAcceptedTerms} color="#ff6a00" />
-                  <Text style={styles.checkboxLabel}> I accept the terms</Text>
+                {uploadedQualifications.length > 0 && (
+                  <View style={{ marginTop: 12 }}>
+                    {uploadedQualifications.map((qualification, index) => (
+                      <View key={index} style={styles.fileNameContainer}>
+                        <Text style={styles.fileName}>📎 {qualification.fileName}</Text>
+                        <TouchableOpacity 
+                          onPress={() => {
+                            setUploadedQualifications(prev => prev.filter((_, i) => i !== index));
+                          }}
+                          style={styles.removeFileButton}
+                        >
+                          <Text style={styles.removeFileText}>✕</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                <View style={styles.checkboxContainer}>
+                  <View style={styles.checkboxRow}>
+                    <Checkbox value={acceptedTerms} onValueChange={setAcceptedTerms} color="#ff6a00" />
+                    <Text style={styles.checkboxLabel}> I accept the terms</Text>
+                  </View>
+
+                  <Pressable>
+                    <Text style={styles.link}>Read our T&Cs</Text>
+                  </Pressable>
                 </View>
-
-                <Pressable>
-                  <Text style={styles.link}>Read our T&Cs</Text>
-                </Pressable>
 
                 <TouchableOpacity
                   style={[styles.submitButton, isSubmitDisabled && { opacity: 0.4 }]}
@@ -266,6 +344,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 6,
   },
+  checkboxContainer: {
+    marginTop: 24,
+    marginBottom: 8,
+  },
   checkboxLabel: {
     marginLeft: 8,
     fontSize: 14,
@@ -273,8 +355,8 @@ const styles = StyleSheet.create({
   link: {
     color: "#ff6a00",
     textDecorationLine: "underline",
-    marginBottom: 16,
-    marginTop: -4,
+    marginBottom: 8,
+    marginTop: 4,
   },
   submitButton: {
     backgroundColor: "#000",
@@ -287,6 +369,65 @@ const styles = StyleSheet.create({
   },
   submitText: {
     color: "#fff",
+    fontWeight: "bold",
+  },
+  uploadedFileName: {
+    marginTop: 8,
+    fontSize: 14,
+    color: "#007bff",
+    fontStyle: "italic",
+  },
+  pdfUploadButton: {
+    backgroundColor: "#000",
+    padding: 14,
+    borderRadius: 8,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  pdfUploadButtonSuccess: {
+    backgroundColor: "#333",
+  },
+  pdfUploadButtonDisabled: {
+    backgroundColor: "#6c757d",
+  },
+  pdfUploadButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+  },
+  uploadingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  fileNameContainer: {
+    backgroundColor: "#f8f9fa",
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#dee2e6",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  fileName: {
+    fontSize: 14,
+    color: "#495057",
+    flex: 1,
+  },
+  removeFileButton: {
+    backgroundColor: "#dc3545",
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 8,
+  },
+  removeFileText: {
+    color: "#fff",
+    fontSize: 12,
     fontWeight: "bold",
   },
 });

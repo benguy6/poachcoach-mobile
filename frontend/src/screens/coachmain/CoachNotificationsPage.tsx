@@ -1,5 +1,5 @@
 // CoachNotificationsPage.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,68 +9,30 @@ import {
   SafeAreaView,
   Image,
   Switch,
+  RefreshControl,
+  Alert,
 } from 'react-native';
-import { Bell, Calendar, MessageCircle, CreditCard, X, Check, Settings, Award } from 'lucide-react-native';
+import { Bell, Calendar, MessageCircle, CreditCard, X, Check, Settings, Award, CheckCircle, XCircle } from 'lucide-react-native';
+import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead } from '../../services/api';
+import { getToken } from '../../services/auth';
+
+type Notification = {
+  id: number;
+  type: string;
+  title: string;
+  message: string;
+  time: string;
+  read: boolean;
+  icon: React.ComponentType<{ size?: number; color?: string }>;
+  color: string;
+  actionable: boolean;
+  data?: any;
+};
 
 const CoachNotificationsPage = () => {
-  const [notifications, setNotifications] = useState([
-    {
-      id: 1,
-      type: 'booking_request',
-      title: 'New Booking Request',
-      message: 'John has requested a session on June 21st at 3:00 PM',
-      time: '2 min ago',
-      read: false,
-      icon: Calendar,
-      color: '#f97316',
-      actionable: true,
-    },
-    {
-      id: 2,
-      type: 'message',
-      title: 'New Message',
-      message: 'Student Jane: "Can we shift tomorrow’s time?"',
-      time: '20 min ago',
-      read: false,
-      icon: MessageCircle,
-      color: '#3b82f6',
-      actionable: true,
-      avatar: 'https://randomuser.me/api/portraits/women/5.jpg',
-    },
-    {
-      id: 3,
-      type: 'payment_received',
-      title: 'Payment Received',
-      message: 'You received $50.00 from Michael for yesterday’s session',
-      time: '3 hours ago',
-      read: true,
-      icon: CreditCard,
-      color: '#10b981',
-      actionable: false,
-    },
-    {
-      id: 4,
-      type: 'session_cancelled',
-      title: 'Session Cancelled',
-      message: 'Sarah cancelled the 5:00 PM session today',
-      time: '6 hours ago',
-      read: true,
-      icon: X,
-      color: '#ef4444',
-      actionable: false,
-    },
-    {
-      id: 5,
-      type: 'achievement',
-      title: 'You’re Popular!',
-      message: '5 new students booked with you this week!',
-      time: '1 day ago',
-      read: true,
-      icon: Award,
-      color: '#10b981',
-      actionable: false,
-    },
-  ]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [settings, setSettings] = useState({
     bookingRequests: true,
@@ -82,10 +44,131 @@ const CoachNotificationsPage = () => {
 
   const [activeTab, setActiveTab] = useState('all');
 
-  const markAsRead = (id: number) => {
-    setNotifications(prev =>
-      prev.map(notif => (notif.id === id ? { ...notif, read: true } : notif))
-    );
+  useEffect(() => {
+    loadNotifications();
+  }, []);
+
+  const loadNotifications = async () => {
+    try {
+      setLoading(true);
+      const token = await getToken();
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const response = await getNotifications(token);
+      if (response.success) {
+        const transformedNotifications = transformNotifications(response.notifications);
+        setNotifications(transformedNotifications);
+      }
+    } catch (error) {
+      console.error('Error loading notifications:', error);
+      Alert.alert('Error', 'Failed to load notifications');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadNotifications();
+    setRefreshing(false);
+  };
+
+  const transformNotifications = (apiNotifications: any[]) => {
+    return apiNotifications.map(notif => {
+      let icon, color, actionable = false;
+
+      switch (notif.type) {
+        case 'reschedule_response':
+          const isAccepted = notif.data?.response === 'accept';
+          icon = isAccepted ? CheckCircle : XCircle;
+          color = isAccepted ? '#10b981' : '#ef4444';
+          actionable = false;
+          break;
+        case 'booking_request':
+          icon = Calendar;
+          color = '#f97316';
+          actionable = true;
+          break;
+        case 'message':
+          icon = MessageCircle;
+          color = '#3b82f6';
+          actionable = true;
+          break;
+        case 'payment_received':
+          icon = CreditCard;
+          color = '#10b981';
+          actionable = false;
+          break;
+        case 'session_cancelled':
+          icon = X;
+          color = '#ef4444';
+          actionable = false;
+          break;
+        default:
+          icon = Bell;
+          color = '#6b7280';
+          actionable = false;
+      }
+
+      return {
+        id: notif.id,
+        type: notif.type,
+        title: notif.title,
+        message: notif.message,
+        time: formatTime(notif.created_at),
+        read: notif.is_read,
+        icon,
+        color,
+        actionable,
+        data: notif.data
+      };
+    });
+  };
+
+  const formatTime = (timestamp: string) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
+
+    if (diffInMinutes < 60) {
+      return `${diffInMinutes} min ago`;
+    } else if (diffInMinutes < 1440) {
+      const hours = Math.floor(diffInMinutes / 60);
+      return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+    } else {
+      const days = Math.floor(diffInMinutes / 1440);
+      return `${days} day${days > 1 ? 's' : ''} ago`;
+    }
+  };
+
+  const markAsRead = async (id: number) => {
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      await markNotificationAsRead(token, id.toString());
+      setNotifications(prev =>
+        prev.map(notif => (notif.id === id ? { ...notif, read: true } : notif))
+      );
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
+  };
+
+  const markAllAsRead = async () => {
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      await markAllNotificationsAsRead(token);
+      setNotifications(prev =>
+        prev.map(notif => ({ ...notif, read: true }))
+      );
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
+    }
   };
 
   const deleteNotification = (id: number) => {
@@ -94,173 +177,301 @@ const CoachNotificationsPage = () => {
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  type Notification = {
-    id: number;
-    type: string;
-    title: string;
-    message: string;
-    time: string;
-    read: boolean;
-    icon: React.ComponentType<{ size?: number; color?: string }>;
-    color: string;
-    actionable: boolean;
-    avatar?: string;
-  };
-
   const NotificationItem: React.FC<{ notification: Notification }> = ({ notification }) => {
     const IconComponent = notification.icon;
+    
+    // Special rendering for reschedule response notifications
+    const isRescheduleResponse = notification.type === 'reschedule_response';
+    const responseData = notification.data;
+    
     return (
       <TouchableOpacity
         style={[styles.notificationItem, !notification.read && styles.unreadNotification]}
         onPress={() => markAsRead(notification.id)}
       >
-        <View style={styles.notificationContent}>
+        <View style={styles.iconContainer}>
+          <View style={[styles.iconCircle, { backgroundColor: notification.color + '20' }]}>
+            <IconComponent size={24} color={notification.color} />
+          </View>
+          {!notification.read && <View style={styles.unreadDot} />}
+        </View>
+        
+        <View style={styles.contentContainer}>
           <View style={styles.notificationHeader}>
-            <View style={styles.iconContainer}>
-              {notification.avatar ? (
-                <Image source={{ uri: notification.avatar }} style={styles.avatar} />
-              ) : (
-                <View style={[styles.iconWrapper, { backgroundColor: notification.color + '20' }]}> 
-                  <IconComponent size={20} color={notification.color} />
-                </View>
+            <Text style={styles.title}>{notification.title}</Text>
+            <Text style={styles.time}>{notification.time}</Text>
+          </View>
+          
+          <Text style={styles.message}>{notification.message}</Text>
+          
+          {/* Special UI for reschedule response notifications */}
+          {isRescheduleResponse && responseData && (
+            <View style={[styles.responseDetails, { borderLeftColor: notification.color }]}>
+              <Text style={styles.responseLabel}>
+                {responseData.response === 'accept' ? 'Accepted' : 'Rejected'}
+              </Text>
+              <Text style={styles.sessionDetails}>
+                {responseData.sport} • {responseData.formattedDate} at {responseData.formattedTime}
+              </Text>
+              {responseData.studentName && (
+                <Text style={styles.studentName}>Student: {responseData.studentName}</Text>
               )}
             </View>
-            <View style={styles.textContainer}>
-              <View style={styles.titleRow}>
-                <Text style={styles.notificationTitle}>{notification.title}</Text>
-                <Text style={styles.timeText}>{notification.time}</Text>
-              </View>
-              <Text style={styles.notificationMessage}>{notification.message}</Text>
-            </View>
-          </View>
-          {notification.actionable && !notification.read && (
-            <View style={styles.actionButtons}>
-              <TouchableOpacity style={[styles.actionButton, styles.primaryAction]} onPress={() => markAsRead(notification.id)}>
-                <Text style={styles.primaryActionText}>View</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.actionButton, styles.secondaryAction]} onPress={() => deleteNotification(notification.id)}>
-                <Text style={styles.secondaryActionText}>Dismiss</Text>
+          )}
+          
+          {notification.actionable && (
+            <View style={styles.actions}>
+              <TouchableOpacity style={styles.actionButton}>
+                <Text style={styles.actionText}>View</Text>
               </TouchableOpacity>
             </View>
           )}
         </View>
+        
+        <TouchableOpacity 
+          style={styles.deleteButton}
+          onPress={() => deleteNotification(notification.id)}
+        >
+          <X size={16} color="#6b7280" />
+        </TouchableOpacity>
       </TouchableOpacity>
     );
   };
 
+  const filteredNotifications = notifications.filter(notif => 
+    activeTab === 'all' || !notif.read
+  );
+
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Coach Notifications</Text>
-        <TouchableOpacity 
-          style={[styles.tabButton, activeTab === 'settings' && styles.activeTab]}
-          onPress={() => setActiveTab(activeTab === 'all' ? 'settings' : 'all')}
+        <Text style={styles.headerTitle}>Notifications</Text>
+        {unreadCount > 0 && (
+          <TouchableOpacity onPress={markAllAsRead} style={styles.markAllButton}>
+            <Text style={styles.markAllText}>Mark all read</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <View style={styles.tabs}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'all' && styles.activeTab]}
+          onPress={() => setActiveTab('all')}
         >
-          <Settings size={16} color={activeTab === 'settings' ? '#f97316' : '#6b7280'} />
+          <Text style={[styles.tabText, activeTab === 'all' && styles.activeTabText]}>
+            All ({notifications.length})
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'unread' && styles.activeTab]}
+          onPress={() => setActiveTab('unread')}
+        >
+          <Text style={[styles.tabText, activeTab === 'unread' && styles.activeTabText]}>
+            Unread ({unreadCount})
+          </Text>
         </TouchableOpacity>
       </View>
 
-      {activeTab === 'all' ? (
-        <ScrollView style={styles.container}>
-          {notifications.map(notification => (
+      <ScrollView 
+        style={styles.scrollView}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {filteredNotifications.length > 0 ? (
+          filteredNotifications.map((notification) => (
             <NotificationItem key={notification.id} notification={notification} />
-          ))}
-        </ScrollView>
-      ) : (
-        <ScrollView style={styles.container}>
-          {Object.entries(settings).map(([key, value]) => (
-            <View key={key} style={styles.settingItem}>
-              <Text style={styles.settingText}>{key.replace(/([A-Z])/g, ' $1')}</Text>
-              <Switch
-                value={value}
-                onValueChange={val => setSettings(prev => ({ ...prev, [key]: val }))}
-                trackColor={{ false: '#e5e7eb', true: '#fed7aa' }}
-                thumbColor={value ? '#f97316' : '#f3f4f6'}
-              />
-            </View>
-          ))}
-        </ScrollView>
-      )}
+          ))
+        ) : (
+          <View style={styles.emptyState}>
+            <Bell size={48} color="#d1d5db" />
+            <Text style={styles.emptyTitle}>No notifications</Text>
+            <Text style={styles.emptySubtitle}>
+              {activeTab === 'unread' 
+                ? "You're all caught up!" 
+                : "New notifications will appear here"
+              }
+            </Text>
+          </View>
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#f9fafb' },
-  container: { padding: 16 },
+  container: {
+    flex: 1,
+    backgroundColor: '#111827',
+  },
   header: {
-    backgroundColor: '#fff',
-    padding: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: '#374151',
   },
-  headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#111827' },
-  tabButton: {
-    backgroundColor: '#f3f4f6',
-    padding: 8,
-    borderRadius: 20,
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  markAllButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#f97316',
+    borderRadius: 6,
+  },
+  markAllText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  tabs: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingTop: 10,
+  },
+  tab: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginRight: 16,
+    borderRadius: 8,
   },
   activeTab: {
-    backgroundColor: '#fed7aa',
+    backgroundColor: '#f97316',
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#9ca3af',
+  },
+  activeTabText: {
+    color: '#ffffff',
+  },
+  scrollView: {
+    flex: 1,
   },
   notificationItem: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
+    flexDirection: 'row',
     padding: 16,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#f97316',
+    borderBottomWidth: 1,
+    borderBottomColor: '#374151',
+    alignItems: 'flex-start',
   },
   unreadNotification: {
-    borderLeftColor: '#ef4444',
+    backgroundColor: '#1f2937',
   },
-  notificationContent: {},
-  notificationHeader: { flexDirection: 'row' },
-  iconContainer: { marginRight: 12 },
-  iconWrapper: {
+  iconContainer: {
+    position: 'relative',
+    marginRight: 12,
+  },
+  iconCircle: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
   },
-  avatar: { width: 40, height: 40, borderRadius: 20 },
-  textContainer: { flex: 1 },
-  titleRow: {
+  unreadDot: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#f97316',
+    borderWidth: 2,
+    borderColor: '#111827',
+  },
+  contentContainer: {
+    flex: 1,
+  },
+  notificationHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 4,
   },
-  notificationTitle: { fontSize: 16, fontWeight: '600' },
-  timeText: { fontSize: 12, color: '#6b7280' },
-  notificationMessage: { fontSize: 14, color: '#4b5563', marginTop: 4 },
-  actionButtons: {
+  title: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
+    flex: 1,
+  },
+  time: {
+    fontSize: 12,
+    color: '#9ca3af',
+    marginLeft: 8,
+  },
+  message: {
+    fontSize: 14,
+    color: '#d1d5db',
+    lineHeight: 20,
+  },
+  responseDetails: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: '#1f2937',
+    borderRadius: 8,
+    borderLeftWidth: 3,
+  },
+  responseLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#ffffff',
+    marginBottom: 4,
+  },
+  sessionDetails: {
+    fontSize: 13,
+    color: '#d1d5db',
+    marginBottom: 2,
+  },
+  studentName: {
+    fontSize: 12,
+    color: '#9ca3af',
+    fontStyle: 'italic',
+  },
+  actions: {
     flexDirection: 'row',
     marginTop: 12,
-    justifyContent: 'flex-end',
-    gap: 12,
   },
   actionButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#f97316',
+    borderRadius: 6,
+    marginRight: 8,
   },
-  primaryAction: { backgroundColor: '#f97316' },
-  secondaryAction: { backgroundColor: '#f3f4f6' },
-  primaryActionText: { color: '#fff', fontWeight: '600' },
-  secondaryActionText: { color: '#6b7280', fontWeight: '600' },
-  settingItem: {
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  actionText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  deleteButton: {
+    padding: 8,
+    marginLeft: 8,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    padding: 40,
+    marginTop: 60,
   },
-  settingText: { fontSize: 16, color: '#111827', fontWeight: '500' },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#ffffff',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: '#9ca3af',
+    textAlign: 'center',
+  },
 });
 
 export default CoachNotificationsPage;

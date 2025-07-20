@@ -23,7 +23,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { uploadProfilePicture, getStudentProfile } from '../../services/api'; // Adjust path as needed
 import { useRoute, RouteProp, useNavigation } from '@react-navigation/native';
-import { supabase } from '../../services/supabase'; // Correct import path
+import { supabase } from '../../services/supabase'; 
 
 type Achievement = {
   id: string | number;

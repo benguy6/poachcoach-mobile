@@ -78,7 +78,7 @@ router.get('/', verifySupabaseToken, async (req, res) => {
     }
 
     // Calculate average rating
-    let averageRating = 5; // Default rating
+    let averageRating = 5.0; // Default rating
     if (ratings && ratings.length > 0) {
       const totalRatings = ratings.reduce((sum, row) => sum + parseFloat(row.rating), 0);
       averageRating = totalRatings / ratings.length;
