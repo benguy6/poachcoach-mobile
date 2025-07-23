@@ -33,4 +33,3 @@ const verifySupabaseToken = async (req, res, next) => {
 module.exports = {
   verifySupabaseToken,
 };
-

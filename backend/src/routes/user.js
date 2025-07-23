@@ -1,9 +1,34 @@
 const express = require('express');
-const bcrypt = require('bcryptjs'); 
+const axios = require('axios');
+const bcrypt = require('bcryptjs');
 const { supabase } = require('../supabaseClient');
 const { verifySupabaseToken } = require('../middleware/authMiddleware');
 
 const router = express.Router();
+
+const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
+
+const getGeoFromPostalCode = async (postalCode) => {
+  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${postalCode},Singapore&key=${GOOGLE_MAPS_API_KEY}`;
+  console.log(`Sending request to Google Maps API: ${url}`);
+  try {
+    const response = await axios.get(url);
+    console.log('Raw response:', response.data);
+    const results = response.data.results;
+    if (results.length > 0) {
+      const formattedAddress = results[0].formatted_address;
+      const latitude = results[0].geometry.location.lat;
+      const longitude = results[0].geometry.location.lng;
+      return { address: formattedAddress, latitude, longitude };
+    } else {
+      console.warn(`Postal code ${postalCode} not found.`);
+      return { address: 'Address not found', latitude: null, longitude: null };
+    }
+  } catch (error) {
+    console.error('Error fetching address from Google Maps API:', error.message);
+    return { address: 'Address not found', latitude: null, longitude: null };
+  }
+};
 
 const isStrongPassword = (password) => {
   if (typeof password !== 'string') return false;  
@@ -120,7 +145,6 @@ router.post('/signup-coach', async (req, res) => {
     gender,
     number,
     postal_code,
-    qualifications, 
     sport,
   } = req.body;
 
@@ -138,40 +162,66 @@ router.post('/signup-coach', async (req, res) => {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
-  const { error: userErr } = await supabase.from('Users').insert([
-    {
+  try {
+    let address, latitude, longitude;
+    try {
+      const geoData = await getGeoFromPostalCode(postal_code.toString()); // Ensure postal_code is treated as a string
+      address = geoData.address;
+      latitude = geoData.latitude;
+      longitude = geoData.longitude;
+
+      if (!latitude || !longitude) {
+        latitude = 1.290270; // Default latitude for Singapore
+        longitude = 103.851959; // Default longitude for Singapore
+      }
+    } catch (geoError) {
+      console.log('Geolocation failed, using default address:', geoError.message);
+      address = 'Address not found';
+      latitude = 1.290270;
+      longitude = 103.851959;
+    }
+
+    const { error: userErr } = await supabase.from('Users').insert([
+      {
+        id,
+        email,
+        first_name,
+        last_name,
+        age: age.toString(),
+        gender,
+        number,
+        postal_code,
+        address, // Store the converted address
+        latitude: latitude.toString(),
+        longitude: longitude.toString(),
+        role: 'coach',
+      },
+    ]);
+
+    if (userErr) {
+      console.error('Error inserting into Users:', userErr.message);
+      return res.status(500).json({ error: userErr.message });
+    }
+
+    const coachPayload = {
       id,
-      email,
-      first_name,
-      last_name,
-      age: age.toString(),
-      gender,
-      number,
-      postal_code,
-      role: 'coach',
-    },
-  ]);
+      sport,
+    };
 
-  if (userErr) {
-    console.error('Error inserting into Users:', userErr.message);
-    return res.status(500).json({ error: userErr.message });
+    const { error: coachErr } = await supabase.from('Coaches').insert([coachPayload]);
+
+    if (coachErr) {
+      console.error('Error inserting into Coaches:', coachErr.message);
+      return res.status(500).json({ error: coachErr.message });
+    }
+
+    return res.status(201).json({ message: 'Coach registered successfully' });
+  } catch (err) {
+    console.error('Coach signup error:', err.message);
+    return res.status(500).json({ error: 'Failed to create coach account' });
   }
-
-  const coachPayload = {
-    id,
-    sport,
-    qualifications,
-  };
-
-  const { error: coachErr } = await supabase.from('Coaches').insert([coachPayload]);
-
-  if (coachErr) {
-    console.error('Error inserting into Coaches:', coachErr.message);
-    return res.status(500).json({ error: coachErr.message });
-  }
-
-  return res.status(201).json({ message: 'Coach registered successfully' });
 });
+
 
 
 
@@ -192,30 +242,60 @@ router.post('/signup-student', async (req, res) => {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
-  const { error: userErr } = await supabase.from('Users').insert([{
-    id,
-    email,
-    first_name,
-    last_name,
-    age: age.toString(),
-    gender,
-    number,
-    postal_code,
-    role: 'student',
-  }]);
+  try {
+    let address, latitude, longitude;
+    try {
+      const geoData = await getGeoFromPostalCode(postal_code); // Ensure postal_code is treated as a string
+      address = geoData.address;
+      latitude = geoData.latitude;
+      longitude = geoData.longitude;
 
-  if (userErr) {
-    return res.status(500).json({ error: userErr.message });
+      if (!latitude || !longitude) {
+        latitude = 1.290270; // Default latitude for Singapore
+        longitude = 103.851959; // Default longitude for Singapore
+      }
+    } catch (geoError) {
+      console.log('Geolocation failed, using default address:', geoError.message);
+      address = 'Address not found';
+      latitude = 1.290270;
+      longitude = 103.851959;
+    }
+
+    const { error: userErr } = await supabase.from('Users').insert([
+      {
+        id,
+        email,
+        first_name,
+        last_name,
+        age: age.toString(),
+        gender,
+        number,
+        postal_code,
+        address, // Store the converted address
+        latitude: latitude.toString(),
+        longitude: longitude.toString(),
+        role: 'student',
+      },
+    ]);
+
+    if (userErr) {
+      return res.status(500).json({ error: userErr.message });
+    }
+
+    const { error: studentErr } = await supabase.from('Students').insert([{ id }]);
+    if (studentErr) {
+      return res.status(500).json({ error: studentErr.message });
+    }
+
+    return res.status(201).json({ message: 'Student metadata stored successfully' });
+  } catch (err) {
+    console.error('Student signup error:', err.message);
+    return res.status(500).json({ error: 'Failed to create student account' });
   }
-
-  const { error: studentErr } = await supabase.from('Students').insert([{ id }]);
-  if (studentErr) {
-    return res.status(500).json({ error: studentErr.message });
-  }
-
-  return res.status(201).json({ message: 'Student metadata stored successfully' });
 });
 
+
+// /api/user/login (backend)
 
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
@@ -241,13 +321,19 @@ router.post('/login', async (req, res) => {
     });
   }
 
-  
 
+  const { data: coachData, error: coachError } = await supabase
+    .from("Coaches")
+    .select("id, has_uploaded_qualifications")
+    .eq("id", user.id)
+    .maybeSingle(); 
   return res.status(200).json({
     message: 'Login successful',
     session,
+    coach: coachData ?? null,
   });
 });
+
 
 
 
@@ -263,7 +349,7 @@ router.post('/request-reset-password', async (req, res) => {
     .from('Users')
     .select('id')
     .eq('email', email)
-    .maybeSingle();
+    .single();
 
   if (userError || !user) {
     return res.status(404).json({ error: 'User not found.' });
