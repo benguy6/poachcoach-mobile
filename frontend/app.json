@@ -1,0 +1,56 @@
+{
+  "expo": {
+    "name": "PoachCoachMobile",
+    "slug": "poachcoachmobile",
+    "scheme": "poachcoach",
+    "owner": "benguy6",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "plugins": [
+      "expo-secure-store", 
+      "expo-web-browser"
+    ],
+    "sdkVersion": "53.0.0",
+    "platforms": ["ios", "android"],
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.poachcoachmobile",
+      "config": {
+        "googleMapsApiKey": "$GOOGLE_MAPS_API_KEY"
+      }
+    },
+    "android": {
+      "package": "com.poachcoachmobile",
+      "edgeToEdgeEnabled": true,
+      "config": {
+        "googleMaps": {
+          "apiKey": "$GOOGLE_MAPS_API_KEY"
+        }
+      },
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": {
+            "scheme": "poachcoach",
+            "host": "reset-password"
+          },
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
