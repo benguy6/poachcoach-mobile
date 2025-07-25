@@ -32,7 +32,7 @@ router.get('/', verifySupabaseToken, async (req, res) => {
     // Fetch completed sessions
     const { data: completedSessions, error: csError } = await supabase
       .from('Sessions')
-      .select('session_id')
+      .select('unique_id')
       .eq('coach_id', userId)
       .eq('session_status', 'completed');
 
@@ -40,14 +40,14 @@ router.get('/', verifySupabaseToken, async (req, res) => {
       return res.status(500).json({ error: 'Failed to fetch completed sessions' });
     }
 
-    const completedSessionIds = completedSessions.map(row => row.session_id);
+    const completedSessionIds = completedSessions.map(row => row.unique_id);
 
     let sessions = [];
     if (completedSessionIds.length > 0) {
       const { data: sessionData, error: sessionError } = await supabase
         .from('Sessions')
-        .select('id, start_time, end_time, topic, coach_id')
-        .in('id', completedSessionIds)
+        .select('unique_id, start_time, end_time, topic, coach_id')
+        .in('unique_id', completedSessionIds)
         .order('start_time', { ascending: true });
 
       if (sessionError) {
@@ -103,7 +103,7 @@ router.get('/', verifySupabaseToken, async (req, res) => {
         averageRating: averageRating.toFixed(1), // Include average rating in the response
       },
       sessions: sessions.map(session => ({
-        id: session.id,
+        id: session.unique_id,
         startTime: session.start_time,
         endTime: session.end_time,
         topic: session.topic,

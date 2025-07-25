@@ -13,6 +13,7 @@ import {
   TextInput,
   Linking,
 } from 'react-native';
+import LoadingOverlay from '../../components/LoadingOverlay';
 import MapView, { Marker, UrlTile } from 'react-native-maps';
 import Slider from '@react-native-community/slider';
 import {
@@ -35,8 +36,11 @@ import { useNavigation } from '@react-navigation/native';
 import { studentTabs } from '../../constants/studentTabs';
 import BottomNavigation from '../../components/BottomNavigation';
 import SelectBookeeModal from '../../components/SelectBookeeModal';
-import { findCoaches } from '../../services/api';
+import ChatModal from '../../components/ChatModal';
+import PoachCoinIcon from '../../components/PoachCoinIcon';
+import { findCoaches, createChatChannel } from '../../services/api';
 import { getToken } from '../../services/auth';
+import { supabase } from '../../services/supabase';
 
 const { width, height } = Dimensions.get('window');
 
@@ -202,6 +206,16 @@ const StudentBookingPage = ({ route }: Props) => {
   const [bookee, setBookee] = useState<{ name?: string; type: "self" | "child" | "new-child" } | null>(route?.params?.bookee ?? null);
   const [showSessionDetails, setShowSessionDetails] = useState(false);
   const [selectedSessionDetails, setSelectedSessionDetails] = useState<any>(null);
+  const [isStartingChat, setIsStartingChat] = useState(false);
+  const [selectedChatChannel, setSelectedChatChannel] = useState<{
+    channelId: string;
+    coachId: string;
+    coachName: string;
+  } | null>(null);
+  const [showBookingConfirmation, setShowBookingConfirmation] = useState(false);
+  const [selectedBookingSession, setSelectedBookingSession] = useState<any>(null);
+  const [isBooking, setIsBooking] = useState(false);
+  const [showWeeklyPaymentChoice, setShowWeeklyPaymentChoice] = useState(false);
   
   // API state
   const [coaches, setCoaches] = useState<any[]>([]);
@@ -216,6 +230,232 @@ const StudentBookingPage = ({ route }: Props) => {
     const query = customQuery || tempSearchQuery;
     setSearchQuery(query);
     setShowSearch(false);
+  };
+
+  // Chat functionality
+  const startChatWithCoach = async (coachId: string) => {
+    if (!coachId) {
+      Alert.alert('Error', 'Coach information not available.');
+      return;
+    }
+
+    if (isStartingChat) {
+      return; // Prevent multiple simultaneous chat starts
+    }
+
+    setIsStartingChat(true);
+    
+    try {
+      console.log('🔍 Starting chat with coach:', coachId);
+      
+      // Get current user session
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !sessionData.session) {
+        throw new Error('Not authenticated');
+      }
+
+      const studentId = sessionData.session.user.id;
+      const token = sessionData.session.access_token;
+
+      console.log('🔍 Student ID:', studentId);
+      console.log('🔍 Creating chat channel...');
+
+      // Create or get existing chat channel with proper coach info
+      const coachName = selectedSessionDetails?.name || selectedSessionDetails?.coach || 'Coach';
+      const channelData = await createChatChannel(token, coachId, studentId, {
+        coachName: coachName,
+        coachAvatar: selectedSessionDetails?.avatar || selectedSessionDetails?.profilePicture,
+        studentName: 'Vansh Puri' // TODO: Get from user context
+      });
+      
+      console.log('🔍 Creating channel with coach info:', {
+        coachName,
+        coachAvatar: selectedSessionDetails?.avatar || selectedSessionDetails?.profilePicture,
+        selectedSessionDetails: selectedSessionDetails
+      });
+      
+      console.log('✅ Chat channel response:', channelData);
+
+      // Close the modal
+      setShowSessionDetails(false);
+      
+      // Navigate to chat page with the channel ID from our function
+      const actualChannelId = channelData.channelId || channelData.channel?.id || `s${studentId.substring(0, 8)}c${coachId.substring(0, 8)}`;
+      
+      console.log('🔍 Navigation Debug - Channel Data:', channelData);
+      console.log('🔍 Navigation Debug - Actual Channel ID:', actualChannelId);
+      
+      // Open chat modal instead of navigating to new page
+      setSelectedChatChannel({
+        channelId: actualChannelId,
+        coachId: coachId,
+        coachName: coachName
+      });
+
+      const message = channelData.existed 
+        ? 'Opening existing chat with this coach!' 
+        : 'New chat started! You can now message this coach.';
+      
+      Alert.alert('Success', message);
+      
+    } catch (error) {
+      console.error('❌ Failed to start chat:', error);
+      Alert.alert('Error', 'Failed to start chat. Please try again.');
+    } finally {
+      setIsStartingChat(false);
+    }
+  };
+
+  // Booking functionality
+  const handleBookSession = (sessionData: any) => {
+    console.log('📅 Opening booking confirmation for session:', sessionData);
+    setSelectedBookingSession(sessionData);
+    
+    if (sessionData.sessionType === 'weekly') {
+      // For weekly sessions, show payment choice modal first
+      setShowWeeklyPaymentChoice(true);
+      setShowSessionDetails(false);
+    } else {
+      // For single and monthly sessions, go directly to booking confirmation
+      setShowBookingConfirmation(true);
+      setShowSessionDetails(false);
+    }
+  };
+
+  const confirmBooking = async (paymentType?: string) => {
+    if (!selectedBookingSession || isBooking) return;
+
+    setIsBooking(true);
+    
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !sessionData.session) {
+        throw new Error('Not authenticated');
+      }
+
+      const token = sessionData.session.access_token;
+      const studentId = sessionData.session.user.id;
+
+      let response;
+      let requestBody;
+
+      if (selectedBookingSession.sessionType === 'single') {
+        // Handle single session booking
+        console.log('📅 Booking single session with data:', {
+          sessionId: selectedBookingSession.sessionData.unique_id,
+          sessionType: selectedBookingSession.sessionType,
+          pricePerSession: selectedBookingSession.sessionDetails.pricePerSession
+        });
+
+        requestBody = {
+          sessionId: selectedBookingSession.sessionData.unique_id,
+          sessionType: selectedBookingSession.sessionType,
+          pricePerSession: selectedBookingSession.sessionDetails.pricePerSession
+        };
+
+        response = await fetch(`http://192.168.88.13:3000/api/student_booking/book-session`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(requestBody)
+        });
+
+      } else if (selectedBookingSession.sessionType === 'monthly') {
+        // Handle monthly recurring session booking
+        console.log('📅 Booking monthly recurring session with data:', {
+          uniqueId: selectedBookingSession.id || selectedBookingSession.sessionData.sessionId,
+          sessionId: selectedBookingSession.sessionData.sessionId || selectedBookingSession.id,
+          sessionType: selectedBookingSession.sessionType
+        });
+
+        requestBody = {
+          uniqueId: selectedBookingSession.id || selectedBookingSession.sessionData.sessionId,
+          sessionId: selectedBookingSession.sessionData.sessionId || selectedBookingSession.id,
+          sessionType: selectedBookingSession.sessionType
+        };
+
+        response = await fetch(`http://192.168.88.13:3000/api/student_booking/book-recurring-session`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(requestBody)
+        });
+
+      } else if (selectedBookingSession.sessionType === 'weekly') {
+        // Handle weekly recurring session booking
+        if (!paymentType) {
+          throw new Error('Payment type is required for weekly sessions');
+        }
+
+        console.log('📅 Booking weekly recurring session with data:', {
+          uniqueId: selectedBookingSession.id || selectedBookingSession.sessionData.sessionId,
+          sessionId: selectedBookingSession.sessionData.sessionId || selectedBookingSession.id,
+          sessionType: selectedBookingSession.sessionType,
+          paymentType: paymentType
+        });
+
+        requestBody = {
+          uniqueId: selectedBookingSession.id || selectedBookingSession.sessionData.sessionId,
+          sessionId: selectedBookingSession.sessionData.sessionId || selectedBookingSession.id,
+          sessionType: selectedBookingSession.sessionType,
+          paymentType: paymentType
+        };
+
+        response = await fetch(`http://192.168.88.13:3000/api/student_booking/book-weekly-session`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(requestBody)
+        });
+
+      } else {
+        throw new Error('Unsupported session type');
+      }
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to book session');
+      }
+
+      console.log('✅ Booking successful:', result);
+      
+      setShowBookingConfirmation(false);
+      setShowWeeklyPaymentChoice(false);
+      setSelectedBookingSession(null);
+      
+      Alert.alert(
+        'Booking Confirmed!', 
+        `Your session has been booked successfully. ${result.message || ''}`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              // Refresh coaches data to reflect updated session status
+              loadCoaches();
+            }
+          }
+        ]
+      );
+
+    } catch (error: any) {
+      console.error('❌ Booking failed:', error);
+      Alert.alert('Booking Failed', error.message || 'Unable to book session. Please try again.');
+    } finally {
+      setIsBooking(false);
+    }
+  };
+
+  // Handlers for weekly payment choice
+  const handleWeeklyPaymentChoice = (paymentType: 'full_package' | 'weekly') => {
+    setShowWeeklyPaymentChoice(false);
+    confirmBooking(paymentType);
   };
   
   const mapRef = useRef<MapView | null>(null);
@@ -987,7 +1227,7 @@ const StudentBookingPage = ({ route }: Props) => {
         // Already on booking page
         break;
       case 'StudentChat':
-        (navigation as any).navigate('StudentChatPage');
+        (navigation as any).navigate('StudentChat');
         break;
       case 'StudentWallet':
         (navigation as any).navigate('StudentWalletPage');
@@ -1279,12 +1519,254 @@ const StudentBookingPage = ({ route }: Props) => {
               </View>
             </View>
 
-            {/* Chat First Button */}
-            <TouchableOpacity style={styles.chatFirstButton}>
-              <MessageCircle size={20} color="white" />
-              <Text style={styles.chatFirstButtonText}>Chat First</Text>
-            </TouchableOpacity>
+            {/* Action Buttons */}
+            <View style={styles.modalActionButtons}>
+              <TouchableOpacity 
+                style={[styles.chatFirstButtonHalf, isStartingChat && styles.chatFirstButtonDisabled]}
+                onPress={() => startChatWithCoach(selectedSessionDetails?.coachId)}
+                disabled={isStartingChat}
+              >
+                <MessageCircle size={20} color="white" />
+                <Text style={styles.chatFirstButtonText}>
+                  {isStartingChat ? 'Starting...' : 'Chat First'}
+                </Text>
+              </TouchableOpacity>
+              
+              {(selectedSessionDetails.sessionType === 'single' || selectedSessionDetails.sessionType === 'monthly' || selectedSessionDetails.sessionType === 'weekly') && (
+                <TouchableOpacity 
+                  style={[styles.bookNowButtonHalf, isBooking && styles.bookNowButtonDisabled]}
+                  onPress={() => handleBookSession(selectedSessionDetails)}
+                  disabled={isBooking}
+                >
+                  <Calendar size={20} color="white" />
+                  <Text style={styles.bookNowButtonText}>
+                    {isBooking ? 'Booking...' : 'Book Now'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </ScrollView>
+        </View>
+      </Modal>
+    );
+  };
+
+  // Booking Confirmation Modal
+  const renderBookingConfirmationModal = () => {
+    if (!selectedBookingSession) return null;
+
+    // Convert SGD to PC (exchange rate: 1 SGD = 5 PC)
+    const exchangeRate = 5;
+    let priceInSGD;
+    let numberOfSessions = 1;
+    let packageType = '';
+
+    if (selectedBookingSession.sessionType === 'single') {
+      // For single sessions
+      priceInSGD = selectedBookingSession.sessionDetails.pricePerSession || selectedBookingSession.price;
+    } else if (selectedBookingSession.sessionType === 'monthly') {
+      // For monthly packages - sum all sessions in the package
+      const monthlySessions = selectedBookingSession.sessionData?.individualSessions || 
+                             selectedBookingSession.sessionDetails?.schedule || [];
+      
+      priceInSGD = monthlySessions.reduce((total: number, session: any) => {
+        return total + (parseFloat(session.price_per_session || session.pricePerSession) || 0);
+      }, 0);
+      
+      numberOfSessions = monthlySessions.length;
+      packageType = 'monthly';
+    } else {
+      // Fallback for other session types
+      priceInSGD = selectedBookingSession.sessionDetails.pricePerSession || selectedBookingSession.price;
+    }
+
+    const priceInPC = Math.round(priceInSGD * exchangeRate);
+
+    return (
+      <Modal
+        visible={showBookingConfirmation}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowBookingConfirmation(false)}
+      >
+        <View style={styles.bookingModalOverlay}>
+          <View style={styles.bookingModalContainer}>
+            <View style={styles.bookingModalHeader}>
+              <Text style={styles.bookingModalTitle}>Confirm Booking</Text>
+              <TouchableOpacity
+                onPress={() => setShowBookingConfirmation(false)}
+                style={styles.bookingModalCloseButton}
+              >
+                <X size={24} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.bookingModalContent}>
+              {/* Warning Message */}
+              <View style={styles.warningCard}>
+                <Text style={styles.warningIcon}>⚠️</Text>
+                <Text style={styles.warningText}>
+                  Please double-check all session details before confirming your booking.
+                </Text>
+              </View>
+
+              {/* Cost Card - Simplified */}
+              <View style={styles.costCard}>
+                {packageType === 'monthly' ? (
+                  <>
+                    <Text style={styles.costTitle}>
+                      Monthly Package
+                    </Text>
+                    <Text style={styles.costSessionCount}>
+                      {numberOfSessions} sessions included
+                    </Text>
+                    <View style={styles.costPriceRow}>
+                      <View style={styles.poachCoinRow}>
+                        <PoachCoinIcon size={24} />
+                        <Text style={styles.costAmount}>{priceInPC} PC</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.costSubtext}>
+                      ${priceInSGD.toFixed(2)} SGD total for all sessions
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <View style={styles.costHeader}>
+                      <Text style={styles.costTitle}>Total Cost</Text>
+                      <View style={styles.poachCoinRow}>
+                        <PoachCoinIcon size={20} />
+                        <Text style={styles.costAmount}>{priceInPC} PC</Text>
+                      </View>
+                    </View>
+                  </>
+                )}
+              </View>
+            </View>
+
+            <View style={styles.bookingModalActions}>
+              <TouchableOpacity
+                style={styles.cancelBookingButton}
+                onPress={() => setShowBookingConfirmation(false)}
+                disabled={isBooking}
+              >
+                <Text style={styles.cancelBookingButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.confirmBookingButton, isBooking && styles.confirmBookingButtonDisabled]}
+                onPress={() => confirmBooking()}
+                disabled={isBooking}
+              >
+                <Text style={styles.confirmBookingButtonText}>
+                  {isBooking ? 'Processing...' : 'Confirm Booking'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  // Weekly Payment Choice Modal
+  const renderWeeklyPaymentChoiceModal = () => {
+    if (!selectedBookingSession || selectedBookingSession.sessionType !== 'weekly') return null;
+
+    // Calculate costs for display
+    const exchangeRate = 5;
+    const weeklySessions = selectedBookingSession.sessionData?.individualSessions || 
+                          selectedBookingSession.sessionDetails?.schedule || [];
+    
+    // Calculate full package cost
+    const fullPackageCostSGD = weeklySessions.reduce((total: number, session: any) => {
+      return total + (parseFloat(session.price_per_session || session.pricePerSession) || 0);
+    }, 0);
+    const fullPackageCostPC = Math.round(fullPackageCostSGD * exchangeRate);
+
+    // Calculate first week cost (first 7 days from start)
+    const recurringMetadata = selectedBookingSession.sessionData?.recurringMetadata;
+    const startDate = recurringMetadata?.start_date ? new Date(recurringMetadata.start_date) : new Date();
+    const oneWeekLater = new Date(startDate);
+    oneWeekLater.setDate(startDate.getDate() + 7);
+
+    const firstWeekSessions = weeklySessions.filter((session: any) => {
+      const sessionDate = new Date(session.date);
+      return sessionDate >= startDate && sessionDate < oneWeekLater;
+    });
+    
+    const firstWeekCostSGD = firstWeekSessions.reduce((total: number, session: any) => {
+      return total + (parseFloat(session.price_per_session || session.pricePerSession) || 0);
+    }, 0);
+    const firstWeekCostPC = Math.round(firstWeekCostSGD * exchangeRate);
+
+    return (
+      <Modal
+        visible={showWeeklyPaymentChoice}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowWeeklyPaymentChoice(false)}
+      >
+        <View style={styles.weeklyPaymentModalOverlay}>
+          <View style={styles.weeklyPaymentModalContainer}>
+            <View style={styles.weeklyPaymentModalHeader}>
+              <Text style={styles.weeklyPaymentModalTitle}>Choose Payment Option</Text>
+              <TouchableOpacity
+                onPress={() => setShowWeeklyPaymentChoice(false)}
+                style={styles.weeklyPaymentModalCloseButton}
+              >
+                <X size={24} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.weeklyPaymentModalContent}>
+              <Text style={styles.weeklyPaymentDescription}>
+                How would you like to pay for this weekly package?
+              </Text>
+
+              {/* Full Package Option */}
+              <TouchableOpacity
+                style={styles.paymentOptionCard}
+                onPress={() => handleWeeklyPaymentChoice('full_package')}
+                disabled={isBooking}
+              >
+                <View style={styles.paymentOptionHeader}>
+                  <Text style={styles.paymentOptionTitle}>Pay For Full Package</Text>
+                  <View style={styles.paymentOptionPrice}>
+                    <PoachCoinIcon size={20} />
+                    <Text style={styles.paymentOptionPriceText}>{fullPackageCostPC} PC</Text>
+                  </View>
+                </View>
+                <Text style={styles.paymentOptionDescription}>
+                  Pay ${fullPackageCostSGD.toFixed(2)} SGD for all {weeklySessions.length} sessions upfront
+                </Text>
+                <Text style={styles.paymentOptionBenefit}>
+                  ✅ All sessions confirmed • No future payments needed
+                </Text>
+              </TouchableOpacity>
+
+              {/* Weekly Option */}
+              <TouchableOpacity
+                style={styles.paymentOptionCard}
+                onPress={() => handleWeeklyPaymentChoice('weekly')}
+                disabled={isBooking}
+              >
+                <View style={styles.paymentOptionHeader}>
+                  <Text style={styles.paymentOptionTitle}>Pay For First Week</Text>
+                  <View style={styles.paymentOptionPrice}>
+                    <PoachCoinIcon size={20} />
+                    <Text style={styles.paymentOptionPriceText}>{firstWeekCostPC} PC</Text>
+                  </View>
+                </View>
+                <Text style={styles.paymentOptionDescription}>
+                  Pay ${firstWeekCostSGD.toFixed(2)} SGD for the first week ({firstWeekSessions.length} sessions)
+                </Text>
+                <Text style={styles.paymentOptionNote}>
+                  💡 Remaining sessions will be marked as unpaid
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </Modal>
     );
@@ -1292,6 +1774,11 @@ const StudentBookingPage = ({ route }: Props) => {
 
   return (
     <View style={styles.container}>
+      <LoadingOverlay 
+        visible={loading} 
+        message="Finding coaches near you..." 
+      />
+      
       <View style={styles.headerFlat}>
         <Text style={styles.tagline}>
           <Text style={styles.taglinePoach}>Poach</Text>
@@ -1610,16 +2097,7 @@ const StudentBookingPage = ({ route }: Props) => {
                     
                     <View style={styles.actionButtons}>
                       <TouchableOpacity 
-                        style={styles.bookButton}
-                        onPress={() => {
-                          // Book Now button functionality removed
-                          console.log('Book Now button pressed for coach:', coach.name);
-                        }}
-                      >
-                        <Text style={styles.bookButtonText}>Book Now</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={styles.chatButton}
+                        style={styles.fullWidthButton}
                         onPress={() => {
                           setSelectedSessionDetails(coach);
                           setShowSessionDetails(true);
@@ -1656,10 +2134,24 @@ const StudentBookingPage = ({ route }: Props) => {
       {/* Session Details Modal */}
       {renderSessionDetailsModal()}
       
+      {/* Booking Confirmation Modal */}
+      {renderBookingConfirmationModal()}
+      
+      {/* Weekly Payment Choice Modal */}
+      {renderWeeklyPaymentChoiceModal()}
+      
       <BottomNavigation
         activeTab="StudentBooking"
         onTabPress={handleTabPress}
         tabs={studentTabs}
+      />
+      
+      {/* Chat Modal */}
+      <ChatModal
+        visible={!!selectedChatChannel}
+        onClose={() => setSelectedChatChannel(null)}
+        channelId={selectedChatChannel?.channelId}
+        chatPartnerName={selectedChatChannel?.coachName}
       />
     </View>
   );
@@ -2048,6 +2540,13 @@ const styles = StyleSheet.create({
     color: '#374151',
     fontWeight: '600',
     fontSize: 16,
+  },
+  fullWidthButton: {
+    backgroundColor: '#f3f4f6',
+    paddingVertical: 10,
+    borderRadius: 12,
+    alignItems: 'center',
+    width: '100%',
   },
   filterModal: {
     flex: 1,
@@ -2521,7 +3020,41 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     gap: 8,
   },
+  chatFirstButtonDisabled: {
+    backgroundColor: '#9ca3af',
+    opacity: 0.7,
+  },
   chatFirstButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalActionButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+  },
+  chatFirstButtonHalf: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f97316',
+    paddingVertical: 16,
+    borderRadius: 12,
+    gap: 8,
+  },
+  bookNowButtonHalf: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#10b981',
+    paddingVertical: 16,
+    borderRadius: 12,
+    gap: 8,
+  },
+  bookNowButtonText: {
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
@@ -2702,6 +3235,267 @@ const styles = StyleSheet.create({
   selectedFilterButtonText: {
     color: 'white',
     fontWeight: '600',
+  },
+  
+  // Booking Modal Styles
+  bookingModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  bookingModalContainer: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    width: '100%',
+    maxHeight: '80%',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  bookingModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  bookingModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1f2937',
+  },
+  bookingModalCloseButton: {
+    padding: 4,
+  },
+  bookingModalContent: {
+    padding: 20,
+    maxHeight: 400,
+  },
+  warningCard: {
+    backgroundColor: '#fef3c7',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  warningIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  warningText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#92400e',
+    fontWeight: '500',
+  },
+  bookingSummaryCard: {
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  bookingSummaryTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 12,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  summaryLabel: {
+    fontSize: 14,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  summaryValue: {
+    fontSize: 14,
+    color: '#1f2937',
+    fontWeight: '600',
+    textAlign: 'right',
+    flex: 1,
+    marginLeft: 12,
+  },
+  costCard: {
+    backgroundColor: '#f0f9ff',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+  },
+  costHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  costTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f2937',
+  },
+  costSessionCount: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 2,
+    marginBottom: 8,
+  },
+  costPriceRow: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  poachCoinRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  poachCoinIcon: {
+    fontSize: 20,
+    marginRight: 6,
+  },
+  costAmount: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#f97316',
+  },
+  costSubtext: {
+    fontSize: 12,
+    color: '#6b7280',
+    textAlign: 'center',
+  },
+  bookingModalActions: {
+    flexDirection: 'row',
+    padding: 20,
+    paddingTop: 10,
+    gap: 12,
+  },
+  cancelBookingButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  cancelBookingButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  confirmBookingButton: {
+    flex: 2,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    backgroundColor: '#f97316',
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  confirmBookingButtonDisabled: {
+    backgroundColor: '#d1d5db',
+  },
+  confirmBookingButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
+  },
+  bookNowButtonDisabled: {
+    backgroundColor: '#d1d5db',
+  },
+  // Weekly Payment Choice Modal Styles
+  weeklyPaymentModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  weeklyPaymentModalContainer: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    maxWidth: 400,
+    width: '100%',
+    maxHeight: '80%',
+  },
+  weeklyPaymentModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  weeklyPaymentModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1f2937',
+  },
+  weeklyPaymentModalCloseButton: {
+    padding: 8,
+  },
+  weeklyPaymentModalContent: {
+    padding: 20,
+  },
+  weeklyPaymentDescription: {
+    fontSize: 16,
+    color: '#6b7280',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  paymentOptionCard: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: '#e5e7eb',
+  },
+  paymentOptionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  paymentOptionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1f2937',
+    flex: 1,
+  },
+  paymentOptionPrice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  paymentOptionPriceText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#f97316',
+    marginLeft: 4,
+  },
+  paymentOptionDescription: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginBottom: 8,
+  },
+  paymentOptionBenefit: {
+    fontSize: 12,
+    color: '#10b981',
+    fontWeight: '500',
+  },
+  paymentOptionNote: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontStyle: 'italic',
   },
 });
 

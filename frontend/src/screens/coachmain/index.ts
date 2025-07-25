@@ -5,4 +5,5 @@ export { default as CoachCalendarPage } from './CoachCalendarPage';
 export { default as CoachSettingPage } from './CoachSettingPage';
 export { default as CoachNotificationsPage } from './CoachNotificationsPage';
 export { default as CoachChatPage } from './CoachChatPage';
+export { default as CoachChatDetailPage } from './CoachChatDetailPage';
 export { default as CoachProfilePage } from './CoachProfilePage';

@@ -6,6 +6,7 @@ import BottomNavigation from "./components/BottomNavigation";
 import * as Linking from "expo-linking";
 import { studentTabs } from "./constants/studentTabs";
 import SelectBookeeModal from "./components/SelectBookeeModal";
+import { NotificationProvider } from "./context/NotificationContext";
 
 
 // Auth Screens
@@ -223,9 +224,6 @@ const StudentSettingsWrapper = (props: any) => (
   <StudentSettingPage
     {...props}
     onBack={() => props.navigation.goBack()}
-    onEditProfile={() => console.log("Edit profile")}
-    darkMode={false}
-    setDarkMode={() => {}}
     notifications={{
       classReminders: true,
       messages: true,
@@ -250,9 +248,6 @@ const CoachSettingsWrapper = (props: any) => (
   <CoachSettingPage
     {...props}
     onBack={() => props.navigation.goBack()}
-    onEditProfile={() => console.log("Edit profile")}
-    darkMode={false}
-    setDarkMode={() => {}}
     notifications={{
       classReminders: true,
       messages: true,
@@ -266,24 +261,26 @@ const CoachSettingsWrapper = (props: any) => (
 
 const App = () => {
   return (
-    <NavigationContainer>
-      <Stack.Navigator
-        screenOptions={{ headerShown: false }}
-        initialRouteName="Entry"
-      >
-        <Stack.Screen name="Entry" component={EntryPage} />
-        <Stack.Screen name="Login" component={LoginScreen} />
-        <Stack.Screen name="ForgotPasswordScreen" component={ForgotPasswordScreen} />
-        <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
-        <Stack.Screen name="CoachSignup1" component={CoachSignupScreen1} />
-        <Stack.Screen name="CoachSignup2" component={CoachSignupScreen2} />
-        <Stack.Screen name="StudentSignup1" component={StudentSignupScreen1} />
-        <Stack.Screen name="StudentSignup2" component={StudentSignupScreen2} />
-        
-        <Stack.Screen name="MainApp" component={MainApp} />
-        <Stack.Screen name="CoachMainApp" component={CoachMainApp} />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <NotificationProvider>
+      <NavigationContainer>
+        <Stack.Navigator
+          screenOptions={{ headerShown: false }}
+          initialRouteName="Entry"
+        >
+          <Stack.Screen name="Entry" component={EntryPage} />
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="ForgotPasswordScreen" component={ForgotPasswordScreen} />
+          <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+          <Stack.Screen name="CoachSignup1" component={CoachSignupScreen1} />
+          <Stack.Screen name="CoachSignup2" component={CoachSignupScreen2} />
+          <Stack.Screen name="StudentSignup1" component={StudentSignupScreen1} />
+          <Stack.Screen name="StudentSignup2" component={StudentSignupScreen2} />
+          
+          <Stack.Screen name="MainApp" component={MainApp} />
+          <Stack.Screen name="CoachMainApp" component={CoachMainApp} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </NotificationProvider>
   );
 };
 

@@ -1,4 +1,3 @@
-import axios from 'axios';
 export const BACKEND_URL = "http://192.168.88.13:3000"; // Update as needed
 
 async function post(endpoint: string, body: any) {
@@ -169,6 +168,26 @@ export const uploadProfilePicture = async (uri: string) => {
   }
   const data = await res.json();
   return data.url; // The new image URL
+};
+
+export const deleteProfilePicture = async (token: string) => {
+  const url = `${BACKEND_URL}/api/deleteProfilePicture`;
+  console.log(`DELETE ${url}`);
+
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error(`Failed to delete profile picture:`, errorText);
+    throw new Error(errorText || "Failed to delete profile picture");
+  }
+
+  return res.json();
 };
 
 export const getStudentProfile = async (token: string) => {
@@ -444,7 +463,7 @@ export const saveQualifications = async (coachId: string, qualificationUrls: str
 };
 
 export const findCoaches = async (token: string) => {
-  const url = `${BACKEND_URL}/api/find-coach/coaches`;
+  const url = `${BACKEND_URL}/api/find-coach/published`;
   console.log(`GET ${url}`);
 
   const res = await fetch(url, {
@@ -562,6 +581,28 @@ export const markNotificationAsRead = async (token: string, notificationId: stri
   return data;
 };
 
+export const deleteNotification = async (token: string, notificationId: string) => {
+  const url = `${BACKEND_URL}/api/notifications/${notificationId}`;
+  console.log(`DELETE ${url}`);
+
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error(`Failed to delete notification:`, errorText);
+    throw new Error(errorText || 'Failed to delete notification');
+  }
+
+  const data = await res.json();
+  console.log(`Notification deleted:`, data);
+  return data;
+};
+
 export const markAllNotificationsAsRead = async (token: string) => {
   const url = `${BACKEND_URL}/api/notifications/mark-all-read`;
   console.log(`PUT ${url}`);
@@ -615,10 +656,399 @@ export const handleRescheduleResponse = async (token: string, sessionId: string,
   return data;
 };
 
+export const getStreamChatToken = async (token: string) => {
+  const url = `${BACKEND_URL}/api/chat/token`;
+  console.log(`POST ${url}`);
 
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
 
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error(`Failed to get Stream Chat token:`, errorText);
+    throw new Error(errorText || "Failed to get Stream Chat token");
+  }
 
+  const data = await res.json();
+  console.log(`Stream Chat token fetched successfully:`, data);
+  return data;
+};
 
+export const createChatChannel = async (token: string, coachId: string, studentId: string, metadata?: {
+  coachName?: string;
+  coachAvatar?: string;
+  studentName?: string;
+}) => {
+  const url = `${BACKEND_URL}/api/chat/create-channel`;
+  console.log(`POST ${url}`);
 
+  // Create a shorter unique channel ID (Stream Chat max: 64 chars)
+  // Use a hash-like approach with first 8 chars of each ID
+  const studentShort = studentId.substring(0, 8);
+  const coachShort = coachId.substring(0, 8);
+  const channelId = `s${studentShort}c${coachShort}`;
 
+  const requestBody = {
+    channelId,
+    members: [studentId, coachId],
+    type: 'messaging',
+    metadata: metadata || {},
+  };
+
+  console.log('🔍 Frontend Debug - Creating channel with:', requestBody);
+  console.log('🔍 Frontend Debug - Channel ID length:', channelId.length);
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(requestBody),
+  });
+
+  console.log('🔍 Frontend Debug - Response status:', res.status);
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error(`❌ Frontend Debug - Failed to create chat channel:`, errorText);
+    console.error(`❌ Frontend Debug - Response status: ${res.status}`);
+    throw new Error(errorText || "Failed to create chat channel");
+  }
+
+  const data = await res.json();
+  console.log(`✅ Frontend Debug - Chat channel created successfully:`, data);
+  return data;
+};
+
+export const getAvailableCoaches = async (token: string) => {
+  const url = `${BACKEND_URL}/api/find-coach/published`;
+  console.log(`GET ${url}`);
+
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error(`Failed to get available coaches:`, errorText);
+    throw new Error(errorText || "Failed to get available coaches");
+  }
+
+  const data = await res.json();
+  console.log(`Available coaches fetched successfully:`, data);
+  return data;
+};
+
+export const getAvailableStudents = async (token: string) => {
+  const url = `${BACKEND_URL}/api/chat/students`;
+  console.log(`GET ${url}`);
+
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error(`Failed to get available students:`, errorText);
+    throw new Error(errorText || "Failed to get available students");
+  }
+
+  const data = await res.json();
+  console.log(`Available students fetched successfully:`, data);
+  return data;
+};
+
+// Wallet API functions
+export const getCoachWallet = async (token: string) => {
+  const url = `${BACKEND_URL}/api/coach/wallet`;
+  console.log(`GET ${url}`);
+
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error(`Failed to get coach wallet:`, errorText);
+    throw new Error(errorText || "Failed to get coach wallet");
+  }
+
+  const data = await res.json();
+  console.log(`Coach wallet fetched successfully:`, data);
+  return data;
+};
+
+export const withdrawToPayNow = async (token: string, amount: number) => {
+  const url = `${BACKEND_URL}/api/coach/wallet/withdraw`;
+  console.log(`POST ${url}`);
+  console.log(`Body:`, { amount });
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ amount }),
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error(`Failed to withdraw to PayNow:`, errorText);
+    throw new Error(errorText || "Failed to withdraw to PayNow");
+  }
+
+  const data = await res.json();
+  console.log(`PayNow withdrawal successful:`, data);
+  return data;
+};
+
+export const getCoachTransactions = async (token: string) => {
+  const url = `${BACKEND_URL}/api/coach/wallet/transactions`;
+  console.log(`GET ${url}`);
+
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error(`Failed to get coach transactions:`, errorText);
+    throw new Error(errorText || "Failed to get coach transactions");
+  }
+
+  const data = await res.json();
+  console.log(`Coach transactions fetched successfully:`, data);
+  return data;
+};
+
+// Student Wallet API functions
+export const getStudentWallet = async (token: string) => {
+  const url = `${BACKEND_URL}/api/student/wallet`;
+  console.log(`GET ${url}`);
+
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error(`Failed to get student wallet:`, errorText);
+    throw new Error(errorText || "Failed to get student wallet");
+  }
+
+  const data = await res.json();
+  console.log(`Student wallet fetched successfully:`, data);
+  return data;
+};
+
+export const topUpStudentWallet = async (token: string, amount: number, paymentMethodId: string) => {
+  const url = `${BACKEND_URL}/api/student/wallet/topup`;
+  console.log(`POST ${url}`);
+  console.log(`Body:`, { amount, paymentMethodId });
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ amount, paymentMethodId }),
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error(`Failed to top up student wallet:`, errorText);
+    throw new Error(errorText || "Failed to top up student wallet");
+  }
+
+  const data = await res.json();
+  console.log(`Student wallet top-up successful:`, data);
+  return data;
+};
+
+export const getStudentTransactions = async (token: string) => {
+  const url = `${BACKEND_URL}/api/student/wallet/transactions`;
+  console.log(`GET ${url}`);
+
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error(`Failed to get student transactions:`, errorText);
+    throw new Error(errorText || "Failed to get student transactions");
+  }
+
+  const data = await res.json();
+  console.log(`Student transactions fetched successfully:`, data);
+  return data;
+};
+
+export const withdrawStudentToPayNow = async (token: string, amount: number) => {
+  const url = `${BACKEND_URL}/api/student/wallet/withdraw`;
+  console.log(`POST ${url}`);
+  console.log(`Body:`, { amount });
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ amount }),
+  });
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error(`Failed to withdraw student to PayNow:`, errorText);
+    throw new Error(errorText || "Failed to withdraw to PayNow");
+  }
+  const data = await res.json();
+  console.log(`Student PayNow withdrawal successful:`, data);
+  return data;
+};
+
+// Coach Class Management API Functions
+export const getActiveClass = async (token: string) => {
+  const url = `${BACKEND_URL}/api/coach/class-management/active-class`;
+  console.log(`GET ${url}`);
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error(`Failed to get active class:`, errorText);
+    throw new Error(errorText || "Failed to get active class");
+  }
+  const data = await res.json();
+  console.log(`Active class fetched successfully:`, data);
+  return data;
+};
+
+export const startClass = async (token: string, uniqueId: string) => {
+  const url = `${BACKEND_URL}/api/coach/class-management/start-class`;
+  console.log(`POST ${url}`);
+  console.log(`Body:`, { uniqueId });
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ uniqueId }),
+  });
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error(`Failed to start class:`, errorText);
+    throw new Error(errorText || "Failed to start class");
+  }
+  const data = await res.json();
+  console.log(`Class started successfully:`, data);
+  return data;
+};
+
+export const endClass = async (token: string, uniqueId: string) => {
+  const url = `${BACKEND_URL}/api/coach/class-management/end-class`;
+  console.log(`POST ${url}`);
+  console.log(`Body:`, { uniqueId });
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ uniqueId }),
+  });
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error(`Failed to end class:`, errorText);
+    throw new Error(errorText || "Failed to end class");
+  }
+  const data = await res.json();
+  console.log(`Class ended successfully:`, data);
+  return data;
+};
+
+export const submitClassFeedback = async (
+  token: string, 
+  uniqueId: string, 
+  generalFeedback: string, 
+  topicsCovered?: string, 
+  studentProgress?: string, 
+  nextSessionPlan?: string,
+  studentFeedbacks?: Array<{studentId: string, feedback: string, rating?: number}>
+) => {
+  const url = `${BACKEND_URL}/api/coach/class-management/submit-feedback`;
+  console.log(`POST ${url}`);
+  const body = {
+    uniqueId,
+    generalFeedback,
+    topicsCovered,
+    studentProgress,
+    nextSessionPlan,
+    studentFeedbacks
+  };
+  console.log(`Body:`, body);
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error(`Failed to submit feedback:`, errorText);
+    throw new Error(errorText || "Failed to submit feedback");
+  }
+  const data = await res.json();
+  console.log(`Feedback submitted successfully:`, data);
+  return data;
+};
+
+// Student Booking Functions
+export const getSessionDetails = async (token: string, sessionId: string) => {
+  const url = `${BACKEND_URL}/api/student/booking/session-details/${sessionId}`;
+  console.log(`GET ${url}`);
+
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const text = await res.text();
+    console.log(`Raw response from ${url}:\n`, text);
+
+    let result;
+    try {
+      result = JSON.parse(text);
+    } catch (err) {
+      console.error(`Failed to parse JSON from ${url}:\n`, text);
+      throw new Error("Invalid response from server. Expected JSON.");
+    }
+
+    if (!res.ok) {
+      console.error(`Server responded with status ${res.status}`);
+      console.error("Server error body:", result);
+      throw new Error(result.error || result.message || "Server responded with error");
+    }
+
+    return result;
+  } catch (err: any) {
+    console.error(`GET ${url} failed:`, err.message);
+    throw err;
+  }
+};
 

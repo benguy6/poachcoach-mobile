@@ -13,6 +13,7 @@ import {
   Linking,
   Alert,
 } from 'react-native';
+import LoadingOverlay from '../../components/LoadingOverlay';
 import {
   ChevronLeft,
   ChevronRight,
@@ -890,6 +891,11 @@ const StudentCalendarPage = () => {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#f97316" />
       
+      <LoadingOverlay 
+        visible={loading} 
+        message="Loading your sessions..." 
+      />
+      
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
@@ -901,11 +907,7 @@ const StudentCalendarPage = () => {
         </Text>
       </View>
 
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading your sessions...</Text>
-        </View>
-      ) : error ? (
+      {error ? (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>Error: {error}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={fetchStudentSessions}>

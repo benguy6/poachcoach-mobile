@@ -32,7 +32,7 @@ router.get('/sessions', verifySupabaseToken, async (req, res) => {
         duration
       `)
       .eq('coach_id', coachId)
-      .in('session_status', ['pubcon', 'confirmed'])
+      .in('session_status', ['published', 'pubcon', 'confirmed'])
       .order('date', { ascending: true })
       .order('start_time', { ascending: true });
 
@@ -211,6 +211,82 @@ router.get('/sessions', verifySupabaseToken, async (req, res) => {
   } catch (error) {
     console.error('Error in coach calendar sessions route:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Debug endpoint to check all sessions for a coach
+router.get('/debug-sessions', verifySupabaseToken, async (req, res) => {
+  try {
+    const coachId = req.user.id;
+    console.log('🔍 DEBUG: Fetching ALL sessions for coach:', coachId);
+
+    // Get ALL sessions for this coach without any status filtering
+    const { data: allSessions, error: allSessionsError } = await supabase
+      .from('Sessions')
+      .select('*')
+      .eq('coach_id', coachId)
+      .order('date', { ascending: true })
+      .order('start_time', { ascending: true });
+
+    console.log('🔍 DEBUG: All sessions query result:', { 
+      sessions: allSessions?.length, 
+      error: allSessionsError,
+      sessions: allSessions 
+    });
+
+    if (allSessionsError) {
+      console.error('🔍 DEBUG: Error fetching all sessions:', allSessionsError);
+      return res.status(500).json({ error: 'Failed to fetch all sessions' });
+    }
+
+    // Get sessions with specific statuses
+    const { data: pubconSessions, error: pubconError } = await supabase
+      .from('Sessions')
+      .select('*')
+      .eq('coach_id', coachId)
+      .eq('session_status', 'pubcon');
+
+    const { data: confirmedSessions, error: confirmedError } = await supabase
+      .from('Sessions')
+      .select('*')
+      .eq('coach_id', coachId)
+      .eq('session_status', 'confirmed');
+
+    // Check current date/time
+    const currentDateTime = new Date();
+    console.log('🔍 DEBUG: Current date/time:', currentDateTime);
+
+    // Check which sessions would be filtered out by date
+    const futureSessions = allSessions?.filter(session => {
+      if (!session.date || !session.end_time) return false;
+      const sessionEndDateTime = new Date(`${session.date}T${session.end_time}`);
+      return sessionEndDateTime > currentDateTime;
+    }) || [];
+
+    console.log('🔍 DEBUG: Future sessions count:', futureSessions.length);
+
+    return res.json({
+      coachId,
+      currentDateTime: currentDateTime.toISOString(),
+      allSessions: allSessions || [],
+      pubconSessions: pubconSessions || [],
+      confirmedSessions: confirmedSessions || [],
+      futureSessions: futureSessions,
+      summary: {
+        totalSessions: allSessions?.length || 0,
+        pubconCount: pubconSessions?.length || 0,
+        confirmedCount: confirmedSessions?.length || 0,
+        futureCount: futureSessions.length,
+        statuses: allSessions?.reduce((acc, session) => {
+          acc[session.session_status] = (acc[session.session_status] || 0) + 1;
+          return acc;
+        }, {}) || {}
+      }
+    });
+
+  } catch (err) {
+    console.error('🔍 DEBUG: Error in debug endpoint:', err);
+    return res.status(500).json({ error: err.message });
   }
 });
 

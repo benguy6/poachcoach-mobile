@@ -1,15 +1,22 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
-  Image,
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
   ScrollView,
   Alert,
+  TextInput,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { getToken } from '../../services/auth';
+import { topUpStudentWallet } from '../../services/api';
+import CONFIG from '../../constants/config';
+import PoachCoinIcon from '../../components/PoachCoinIcon';
 // Update the path below to the actual location of MainAppStackParamList
 import { MainAppStackParamList } from '../../App'; // Adjust the path as needed
 
@@ -18,32 +25,51 @@ type WalletTopUpProps = {
 };
 
 const StudentWalletTopUpPage = ({ navigation }: WalletTopUpProps) => {
+  const [amount, setAmount] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+
   const handleBackPress = () => {
     navigation.goBack();
   };
 
-  const handleConfirmPayment = () => {
-    Alert.alert(
-      "Payment Confirmation", 
-      "Have you completed the PayNow transfer?", 
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Yes, I've Paid",
-          onPress: () => {
-            Alert.alert("Payment Successful", "Your wallet has been topped up!", [
-              {
-                text: "OK",
-                onPress: () => navigation.navigate('StudentTabs'),
-              },
-            ]);
+  const handleTopUp = async () => {
+    const topUpAmount = parseFloat(amount);
+    
+    if (!topUpAmount || topUpAmount <= 0) {
+      Alert.alert('Invalid Amount', 'Please enter a valid amount greater than 0.');
+      return;
+    }
+
+    setIsProcessing(true);
+
+    try {
+      const token = await getToken();
+      if (!token) {
+        throw new Error('Authentication token is missing.');
+      }
+
+      // For now, we'll use a mock payment method ID
+      // In a real implementation, you'd integrate with Stripe React Native SDK
+      const mockPaymentMethodId = 'pm_mock_payment_method';
+      
+      const response = await topUpStudentWallet(token, topUpAmount, mockPaymentMethodId);
+      
+      Alert.alert(
+        'Top-up Successful', 
+        `$${topUpAmount.toFixed(2)} SGD has been converted to ${(topUpAmount * 5).toFixed(2)} PC and added to your wallet!`,
+        [
+          {
+            text: 'OK',
+            onPress: () => navigation.navigate('StudentTabs'),
           },
-        },
-      ]
-    );
+        ]
+      );
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'There was an error processing your top-up. Please try again.';
+      Alert.alert('Top-up Failed', errorMessage);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -57,35 +83,63 @@ const StudentWalletTopUpPage = ({ navigation }: WalletTopUpProps) => {
         <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Top Up with PayNow</Text>
-        <Text style={styles.subtitle}>
-          Scan the QR code below to top up your wallet instantly
-        </Text>
+      <KeyboardAvoidingView 
+        style={styles.keyboardAvoidingView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <ScrollView 
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.mainContent}>
+            <Text style={styles.title}>Top Up Your Wallet</Text>
+            <Text style={styles.subtitle}>
+              Enter the amount you want to add to your wallet
+            </Text>
 
-        <View style={styles.qrContainer}>
-          <Image
-            source={{ 
-              uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f9/PayNow_logo.svg/512px-PayNow_logo.svg.png' 
-            }}
-            style={styles.qrImage}
-            resizeMode="contain"
-          />
-          <Text style={styles.instructions}>
-            1. Open your bank app{'\n'}
-            2. Scan the PayNow QR code above{'\n'}
-            3. Enter your desired top-up amount{'\n'}
-            4. Complete the transfer{'\n'}
-            5. Tap "I've Paid" below
-          </Text>
-        </View>
+            <View style={styles.amountContainer}>
+              <Text style={styles.amountLabel}>Amount (SGD)</Text>
+              <TextInput
+                style={styles.amountInput}
+                placeholder="Enter amount"
+                placeholderTextColor="#9ca3af"
+                keyboardType="numeric"
+                value={amount}
+                onChangeText={setAmount}
+              />
+              
+              {/* Conversion Display */}
+              {amount && parseFloat(amount) > 0 && (
+                <View style={styles.conversionContainer}>
+                  <Text style={styles.conversionLabel}>You will receive:</Text>
+                  <View style={styles.conversionAmount}>
+                    <PoachCoinIcon size={24} />
+                    <Text style={styles.conversionText}>
+                      {(parseFloat(amount) * 5).toFixed(2)} PC
+                    </Text>
+                  </View>
+                  <Text style={styles.conversionRate}>Rate: 1 SGD = 5 PC</Text>
+                </View>
+              )}
+            </View>
+          </View>
 
-        <View style={styles.buttonContainer}>
+          <View style={styles.buttonContainer}>
           <TouchableOpacity 
-            style={styles.confirmButton} 
-            onPress={handleConfirmPayment}
+            style={[
+              styles.confirmButton,
+              (!amount || parseFloat(amount) <= 0) && styles.confirmButtonDisabled
+            ]} 
+            onPress={handleTopUp}
+            disabled={!amount || parseFloat(amount) <= 0 || isProcessing}
           >
-            <Text style={styles.confirmButtonText}>I've Paid</Text>
+            {isProcessing ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.confirmButtonText}>Top Up Wallet</Text>
+            )}
           </TouchableOpacity>
           
           <TouchableOpacity 
@@ -95,7 +149,8 @@ const StudentWalletTopUpPage = ({ navigation }: WalletTopUpProps) => {
             <Text style={styles.cancelButtonText}>Cancel</Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -106,6 +161,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#ffffff',
+  },
+  keyboardAvoidingView: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
@@ -137,7 +195,13 @@ const styles = StyleSheet.create({
     width: 40,
   },
   content: {
+    flexGrow: 1,
     padding: 20,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  mainContent: {
+    width: '100%',
     alignItems: 'center',
   },
   title: {
@@ -153,30 +217,33 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 30,
   },
-  qrContainer: {
+  amountContainer: {
     backgroundColor: '#f9fafb',
     padding: 24,
     borderRadius: 16,
-    alignItems: 'center',
     marginBottom: 40,
     width: '100%',
     borderWidth: 1,
     borderColor: '#e5e7eb',
   },
-  qrImage: {
-    width: 200,
-    height: 200,
-    marginBottom: 20,
+  amountLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#374151',
+    marginBottom: 12,
   },
-  instructions: {
-    fontSize: 14,
-    color: '#4b5563',
-    textAlign: 'center',
-    lineHeight: 20,
+  amountInput: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    backgroundColor: '#ffffff',
   },
   buttonContainer: {
     width: '100%',
     gap: 12,
+    paddingTop: 20,
   },
   confirmButton: {
     backgroundColor: '#f97316',
@@ -189,6 +256,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
+  },
+  confirmButtonDisabled: {
+    backgroundColor: '#9ca3af',
   },
   confirmButtonText: {
     color: '#ffffff',
@@ -208,5 +278,35 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontWeight: '500',
     fontSize: 16,
+  },
+  conversionContainer: {
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: '#fef3c7',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#f59e0b',
+  },
+  conversionLabel: {
+    fontSize: 14,
+    color: '#92400e',
+    marginBottom: 8,
+    fontWeight: '500',
+  },
+  conversionAmount: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  conversionText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#f97316',
+  },
+  conversionRate: {
+    fontSize: 12,
+    color: '#92400e',
+    fontStyle: 'italic',
   },
 });

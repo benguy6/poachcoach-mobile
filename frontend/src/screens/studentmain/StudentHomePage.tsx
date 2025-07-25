@@ -8,15 +8,17 @@ import {
   StyleSheet,
   StatusBar,
   SafeAreaView,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import BottomNavigation from '../../components/BottomNavigation';
 import { studentTabs } from '../../constants/studentTabs';
 import { supabase } from '../../services/supabase';
-import { getStudentDashboard, getNotifications, getUnreadNotificationCount, handleRescheduleResponse, markNotificationAsRead } from '../../services/api';
+import { getStudentDashboard } from '../../services/api';
 import { useFocusEffect } from '@react-navigation/native';
-import * as SecureStore from 'expo-secure-store';
+import { useRecentMessages } from '../../hooks/useRecentMessages';
+import { useNotificationContext } from '../../context/NotificationContext';
+import ChatModal from '../../components/ChatModal';
+import LoadingOverlay from '../../components/LoadingOverlay';
 
 interface Chat {
   id: number;
@@ -27,58 +29,42 @@ interface Chat {
   avatar: string;
 }
 
-interface Notification {
-  id: string;
-  type: string;
-  title: string;
-  message: string;
-  data: any;
-  is_read: boolean;
-  created_at: string;
-}
-
 interface HomePageProps {
   navigation: any;
 }
 
 const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
-  const [notifications, setNotifications] = useState(0);
-  const [notificationsList, setNotificationsList] = useState<Notification[]>([]);
   const [activeTab, setActiveTab] = useState('home');
   const [firstName, setFirstName] = useState('');
   const [sessions, setSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [profilePicture, setProfilePicture] = useState<string | undefined>(undefined);
+  const [selectedChatChannel, setSelectedChatChannel] = useState<{
+    channelId: string;
+    name: string;
+  } | null>(null);
+  
+  // Use the real recent messages hook
+  const { messages: recentMessages, loading: messagesLoading } = useRecentMessages(2);
+  
+  // Use the notifications context
+  const { unreadCount: notifications, fetchUnreadCount } = useNotificationContext();
 
   useFocusEffect(
     React.useCallback(() => {
       const fetchDashboard = async () => {
         try {
-          // Get token from SecureStore
-          const accessToken = await SecureStore.getItemAsync('accessToken');
+          const { data: sessionData, error } = await supabase.auth.getSession();
+          const accessToken = sessionData.session?.access_token;
           if (!accessToken) throw new Error('No access token found');
 
-          // Fetch dashboard data
           const dashboard = await getStudentDashboard(accessToken);
 
           console.log('Dashboard Response:', dashboard); 
-          console.log('User info:', dashboard.user);
-          console.log('Sessions:', dashboard.sessions);
 
           setFirstName(dashboard.user?.name || 'Student'); 
           setSessions(dashboard.sessions || []);
-          setProfilePicture(dashboard.user?.profilePicture || undefined); 
-
-          // Fetch notifications
-          const notificationsResponse = await getNotifications(accessToken);
-          const unreadCountResponse = await getUnreadNotificationCount(accessToken);
-          
-          console.log('Notifications Response:', notificationsResponse);
-          console.log('Unread Count Response:', unreadCountResponse);
-          
-          setNotificationsList(notificationsResponse.notifications || []);
-          setNotifications(unreadCountResponse.unreadCount || 0);
-
+          setProfilePicture(dashboard.user?.profilePicture|| undefined); 
         } catch (error) {
           console.error('Failed to fetch dashboard info', error);
         } finally {
@@ -90,24 +76,7 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
     }, [])
   );
 
-  const chats: Chat[] = [
-    {
-      id: 1,
-      name: 'Coach Vansh',
-      lastMessage: 'Great progress in today\'s session!',
-      time: '2 min ago',
-      unread: 2,
-      avatar: 'https://randomuser.me/api/portraits/men/4.jpg',
-    },
-    {
-      id: 2,
-      name: 'Sarah Johnson',
-      lastMessage: 'Don\'t forget to bring your yoga mat tomorrow',
-      time: '1 hour ago',
-      unread: 0,
-      avatar: 'https://randomuser.me/api/portraits/women/1.jpg',
-    },
-  ];
+  // Remove static chats data - now using real data from useRecentMessages hook
 
   const handleTabPress = (tabId: string) => {
     setActiveTab(tabId);
@@ -120,6 +89,8 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
 
   const handleNotificationPress = () => {
     navigation.navigate('StudentNotifications');
+    // Refresh notifications when user visits the notifications page
+    setTimeout(() => fetchUnreadCount(), 1000);
   };
 
   const handleProfilePress = () => {
@@ -128,75 +99,14 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
     });
   };
 
-  const handleRescheduleAccept = async (notification: Notification) => {
-    try {
-      const accessToken = await SecureStore.getItemAsync('accessToken');
-      if (!accessToken) throw new Error('No access token found');
-
-      const notificationData = notification.data;
-      
-      await handleRescheduleResponse(
-        accessToken, 
-        notificationData.sessionId, 
-        notificationData.studentSessionId, // Use studentSessionId instead of originalDate
-        'accept'
-      );
-
-      // Mark notification as read
-      await markNotificationAsRead(accessToken, notification.id);
-
-      // Refresh notifications list
-      const notificationsResponse = await getNotifications(accessToken);
-      const unreadCountResponse = await getUnreadNotificationCount(accessToken);
-      
-      setNotificationsList(notificationsResponse.notifications || []);
-      setNotifications(unreadCountResponse.unreadCount || 0);
-
-      // Show success message
-      Alert.alert('Success', 'Session reschedule accepted successfully!');
-
-    } catch (error) {
-      console.error('Failed to accept reschedule:', error);
-      Alert.alert('Error', 'Failed to accept reschedule. Please try again.');
-    }
-  };
-
-  const handleRescheduleReject = async (notification: Notification) => {
-    try {
-      const accessToken = await SecureStore.getItemAsync('accessToken');
-      if (!accessToken) throw new Error('No access token found');
-
-      const notificationData = notification.data;
-      
-      await handleRescheduleResponse(
-        accessToken, 
-        notificationData.sessionId, 
-        notificationData.studentSessionId, // Use studentSessionId instead of originalDate
-        'reject'
-      );
-
-      // Mark notification as read
-      await markNotificationAsRead(accessToken, notification.id);
-
-      // Refresh notifications list
-      const notificationsResponse = await getNotifications(accessToken);
-      const unreadCountResponse = await getUnreadNotificationCount(accessToken);
-      
-      setNotificationsList(notificationsResponse.notifications || []);
-      setNotifications(unreadCountResponse.unreadCount || 0);
-
-      // Show success message
-      Alert.alert('Success', 'Session reschedule rejected. A refund will be processed if applicable.');
-
-    } catch (error) {
-      console.error('Failed to reject reschedule:', error);
-      Alert.alert('Error', 'Failed to reject reschedule. Please try again.');
-    }
-  };
-
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#f97316" />
+      
+      <LoadingOverlay 
+        visible={loading} 
+        message="Loading your dashboard..." 
+      />
 
       <ScrollView
         style={styles.content}
@@ -250,22 +160,13 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
           {/* Upcoming Class Card */}
           <View style={styles.upcomingCard}>
             <Text style={styles.upcomingTitle}>Upcoming Class</Text>
-            {loading ? (
-              <Text style={{ padding: 16 }}>Loading...</Text>
-            ) : sessions.length > 0 ? (
+            {sessions.length > 0 ? (
               (() => {
                 const session = sessions[0];
-                // Parse the full datetime strings from backend
                 const startTime = new Date(session.start_time);
                 const endTime = new Date(session.end_time);
                 const today = new Date();
-                
-                // Compare just the date part to avoid timezone issues
-                const sessionDate = new Date(session.date);
-                const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-                const sessionDateOnly = new Date(sessionDate.getFullYear(), sessionDate.getMonth(), sessionDate.getDate());
-                const isToday = sessionDateOnly.getTime() === todayDate.getTime();
-                
+                const isToday = startTime.toDateString() === today.toDateString();
                 return (
                   <>
                     {/* Confirmation Banner */}
@@ -322,89 +223,6 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
             )}
           </View>
 
-          {/* Notifications Card - Show reschedule notifications */}
-          {notificationsList.filter(n => n.type === 'session_reschedule' && !n.is_read).length > 0 && (
-            <View style={styles.notificationsCard}>
-              <Text style={styles.notificationsTitle}>Action Required</Text>
-              {notificationsList
-                .filter(n => n.type === 'session_reschedule' && !n.is_read)
-                .slice(0, 2) // Show max 2 notifications
-                .map((notification) => {
-                  const notificationData = notification.data;
-                  const originalDate = new Date(notificationData.originalDate);
-                  const newDate = new Date(notificationData.newDate);
-                  const responseDeadline = new Date(notification.created_at);
-                  responseDeadline.setHours(responseDeadline.getHours() + 24);
-                  
-                  return (
-                    <View key={notification.id} style={styles.notificationItem}>
-                      <View style={styles.notificationHeader}>
-                        <View style={styles.rescheduleIcon}>
-                          <Ionicons name="calendar" size={16} color="#f97316" />
-                        </View>
-                        <View style={styles.notificationContent}>
-                          <Text style={styles.notificationTitle}>Session Rescheduled</Text>
-                          <Text style={styles.notificationSubtitle}>
-                            {notificationData.sport} class has been rescheduled
-                          </Text>
-                        </View>
-                        <View style={styles.urgentBadge}>
-                          <Text style={styles.urgentText}>URGENT</Text>
-                        </View>
-                      </View>
-                      
-                      <View style={styles.notificationDetails}>
-                        <View style={styles.dateChangeRow}>
-                          <View style={styles.dateChange}>
-                            <Text style={styles.dateLabel}>From:</Text>
-                            <Text style={styles.dateValue}>
-                              {originalDate.toLocaleDateString()} at {notificationData.originalStartTime}
-                            </Text>
-                          </View>
-                          <View style={styles.dateChange}>
-                            <Text style={styles.dateLabel}>To:</Text>
-                            <Text style={styles.dateValue}>
-                              {newDate.toLocaleDateString()} at {notificationData.newStartTime}
-                            </Text>
-                          </View>
-                        </View>
-                        
-                        <Text style={styles.responseDeadline}>
-                          Response needed by: {responseDeadline.toLocaleDateString()} at {responseDeadline.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </Text>
-                        
-                        <View style={styles.notificationActions}>
-                          <TouchableOpacity 
-                            style={styles.acceptButton}
-                            onPress={() => handleRescheduleAccept(notification)}
-                          >
-                            <Text style={styles.acceptButtonText}>Accept</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity 
-                            style={styles.rejectButton}
-                            onPress={() => handleRescheduleReject(notification)}
-                          >
-                            <Text style={styles.rejectButtonText}>Reject</Text>
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                    </View>
-                  );
-                })}
-              
-              {notificationsList.filter(n => n.type === 'session_reschedule' && !n.is_read).length > 2 && (
-                <TouchableOpacity 
-                  style={styles.viewAllNotifications}
-                  onPress={() => navigation.navigate('StudentNotifications')}
-                >
-                  <Text style={styles.viewAllNotificationsText}>
-                    View {notificationsList.filter(n => n.type === 'session_reschedule' && !n.is_read).length - 2} more notifications
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
-
           {/* Recent Messages Card */}
           <View style={styles.messagesCard}>
             <View style={styles.cardHeader}>
@@ -414,35 +232,52 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
               </TouchableOpacity>
             </View>
 
-            {chats.slice(0, 2).map(chat => (
-              <TouchableOpacity
-                key={chat.id}
-                style={styles.chatItem}
-                onPress={() => navigation.navigate('StudentChatDetail', { chatId: chat.id })}
-              >
-                <Image source={{ uri: chat.avatar }} style={styles.chatAvatar} />
-                <View style={styles.chatContent}>
-                  <View style={styles.chatHeader}>
-                    <Text style={styles.chatName}>{chat.name}</Text>
-                    <Text style={styles.chatTime}>{chat.time}</Text>
-                  </View>
-                  <Text style={styles.chatMessage} numberOfLines={1}>
-                    {chat.lastMessage}
-                  </Text>
-                </View>
-                {chat.unread > 0 && (
-                  <View style={styles.unreadBadge}>
-                    <Text style={styles.unreadText}>
-                      {chat.unread > 99 ? '99+' : chat.unread}
+            {messagesLoading ? (
+              <Text style={styles.loadingText}>Loading messages...</Text>
+            ) : recentMessages.length > 0 ? (
+              recentMessages.map(message => (
+                <TouchableOpacity
+                  key={message.id}
+                  style={styles.chatItem}
+                  onPress={() => setSelectedChatChannel({
+                    channelId: message.channelId,
+                    name: message.name
+                  })}
+                >
+                  <Image source={{ uri: message.avatar }} style={styles.chatAvatar} />
+                  <View style={styles.chatContent}>
+                    <View style={styles.chatHeader}>
+                      <Text style={styles.chatName}>{message.name}</Text>
+                      <Text style={styles.chatTime}>{message.time}</Text>
+                    </View>
+                    <Text style={styles.chatMessage} numberOfLines={1}>
+                      {message.lastMessage}
                     </Text>
                   </View>
-                )}
-              </TouchableOpacity>
-            ))}
+                  {message.unread > 0 && (
+                    <View style={styles.unreadBadge}>
+                      <Text style={styles.unreadText}>
+                        {message.unread > 99 ? '99+' : message.unread}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              ))
+            ) : (
+              <Text style={styles.noMessagesText}>No recent messages</Text>
+            )}
           </View>
         </View>
       </ScrollView>
-
+      
+      {/* Chat Modal */}
+      <ChatModal
+        visible={!!selectedChatChannel}
+        onClose={() => setSelectedChatChannel(null)}
+        channelId={selectedChatChannel?.channelId}
+        chatPartnerName={selectedChatChannel?.name}
+      />
+      
       <BottomNavigation
         activeTab="StudentHome"
         onTabPress={handleTabPress}
@@ -731,135 +566,18 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: 'bold',
   },
-  // Notification styles
-  notificationsCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.18,
-    shadowRadius: 16,
-    elevation: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: '#f97316',
-  },
-  notificationsTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: 16,
-  },
-  notificationItem: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-    paddingBottom: 16,
-    marginBottom: 16,
-  },
-  notificationHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  rescheduleIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#fff7ed',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  notificationContent: {
-    flex: 1,
-  },
-  notificationTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 2,
-  },
-  notificationSubtitle: {
+  loadingText: {
+    color: '#9ca3af',
     fontSize: 14,
-    color: '#6b7280',
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
-  urgentBadge: {
-    backgroundColor: '#ef4444',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  urgentText: {
-    color: 'white',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  notificationDetails: {
-    backgroundColor: '#f9fafb',
-    padding: 12,
-    borderRadius: 8,
-  },
-  dateChangeRow: {
-    marginBottom: 12,
-  },
-  dateChange: {
-    marginBottom: 8,
-  },
-  dateLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#6b7280',
-    marginBottom: 2,
-  },
-  dateValue: {
+  noMessagesText: {
+    color: '#9ca3af',
     fontSize: 14,
-    color: '#1f2937',
-  },
-  responseDeadline: {
-    fontSize: 12,
-    color: '#ef4444',
-    fontWeight: '500',
-    marginBottom: 12,
-  },
-  notificationActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  acceptButton: {
-    flex: 1,
-    backgroundColor: '#22c55e',
-    paddingVertical: 8,
-    borderRadius: 6,
-    alignItems: 'center',
-  },
-  acceptButtonText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  rejectButton: {
-    flex: 1,
-    backgroundColor: '#ef4444',
-    paddingVertical: 8,
-    borderRadius: 6,
-    alignItems: 'center',
-  },
-  rejectButtonText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  viewAllNotifications: {
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
-    alignItems: 'center',
-  },
-  viewAllNotificationsText: {
-    color: '#f97316',
-    fontSize: 14,
-    fontWeight: '600',
+    textAlign: 'center',
+    fontStyle: 'italic',
+    paddingVertical: 20,
   },
 });
 

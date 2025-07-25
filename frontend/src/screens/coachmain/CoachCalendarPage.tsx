@@ -41,6 +41,8 @@ import BottomNavigation from '../../components/BottomNavigation';
 import { coachTabs } from '../../constants/coachTabs';
 import { getCoachSessions, cancelCoachSession, rescheduleCoachSession } from '../../services/api';
 import { getToken } from '../../services/auth';
+import { supabase } from '../../services/supabase';
+import ChatModal from '../../components/ChatModal';
 
 const { width } = Dimensions.get('window');
 
@@ -58,6 +60,13 @@ const CoachCalendarPage = () => {
   // Reschedule modal state
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [sessionToReschedule, setSessionToReschedule] = useState<any>(null);
+  
+  // Chat modal state
+  const [selectedChatChannel, setSelectedChatChannel] = useState<{
+    channelId: string;
+    studentId: string;
+    studentName: string;
+  } | null>(null);
   const [rescheduleData, setRescheduleData] = useState({
     newDate: '',
     newStartTime: '07:00',
@@ -132,7 +141,7 @@ const CoachCalendarPage = () => {
       .filter(session => 
         session.date === date && 
         session.id !== sessionToReschedule?.id && // Use unique id for comparison
-        session.status !== 'cancelled'
+        session.sessionStatus !== 'cancelled'
       )
       .sort((a, b) => a.time.localeCompare(b.time));
   };
@@ -444,9 +453,49 @@ const CoachCalendarPage = () => {
     }
   };
 
-  const handleChatWithStudent = (studentId: string) => {
-    // TODO: Implement chat functionality
-    console.log('Chat with student:', studentId);
+  const handleChatWithStudent = async (studentId: string, studentName?: string) => {
+    try {
+      console.log('🔍 Coach starting chat with student:', studentId);
+      
+      const { data: sessionData, error } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      const coachId = sessionData.session?.user?.id;
+      
+      if (!token || !coachId) {
+        Alert.alert('Error', 'Authentication required');
+        return;
+      }
+
+      // Import the API function
+      const { createChatChannel } = await import('../../services/api');
+      
+      // Create or get existing chat channel
+      const channelData = await createChatChannel(token, coachId, studentId, {
+        coachName: 'Coach', // TODO: Get from user context
+        studentName: studentName || 'Student'
+      });
+      
+      console.log('✅ Coach chat channel response:', channelData);
+
+      // Open chat modal instead of navigation
+      const actualChannelId = channelData.channelId || channelData.channel?.id || `s${studentId.substring(0, 8)}c${coachId.substring(0, 8)}`;
+      
+      setSelectedChatChannel({
+        channelId: actualChannelId,
+        studentId: studentId,
+        studentName: studentName || 'Student'
+      });
+
+      const message = channelData.existed 
+        ? 'Opening existing chat with this student!' 
+        : 'New chat started! You can now message this student.';
+      
+      Alert.alert('Success', message);
+      
+    } catch (error) {
+      console.error('❌ Failed to start coach chat:', error);
+      Alert.alert('Error', 'Failed to start chat. Please try again.');
+    }
   };
 
   const renderCalendarDay = ({ item }: { item: any }) => (
@@ -477,73 +526,97 @@ const CoachCalendarPage = () => {
     </TouchableOpacity>
   );
 
-  const renderSessionCard = ({ item }: { item: any }) => (
-    <View style={styles.sessionCard}>
-      <View style={styles.sessionHeader}>
-        <Text style={styles.sessionTitle}>{item.sport}</Text>
-      </View>
+  const renderSessionCard = ({ item }: { item: any }) => {
+    // Determine booking status based on session_status
+    const isBooked = item.sessionStatus === 'confirmed' || item.sessionStatus === 'pubcon';
+    const isPublished = item.sessionStatus === 'published';
+    
+    return (
+      <View style={styles.sessionCard}>
+        <View style={styles.sessionHeader}>
+          <View style={styles.sessionTitleRow}>
+            <Text style={styles.sessionTitle}>{item.sport}</Text>
+            {/* Booking Status Badge */}
+            <View style={[
+              styles.bookingStatusBadge,
+              isBooked ? styles.bookedBadge : styles.availableBadge
+            ]}>
+              <Text style={[
+                styles.bookingStatusText,
+                isBooked ? styles.bookedStatusText : styles.availableStatusText
+              ]}>
+                {isBooked ? 'Booked' : 'Available'}
+              </Text>
+            </View>
+          </View>
+        </View>
 
-      <View style={styles.sessionDetails}>
-        <Text style={styles.sessionTypeText}>
-          {(item.classType === 'Individual' || item.classType === 'single')
-            ? 'Individual Session' 
-            : `Group Session${item.studentsAttending ? ` • ${item.studentsAttending}/${item.maxStudents} students` : ''}`
-          }
-        </Text>
-        <View style={styles.detailRow}>
-          <Clock size={16} color="#9ca3af" />
-          <Text style={styles.detailText}>{formatTime(item.time)} - {formatTime(item.endTime)} • {item.duration}</Text>
-        </View>
-        <View style={styles.detailRow}>
-          <MapPin size={16} color="#9ca3af" />
-          <Text style={styles.detailText}>{item.location}</Text>
-        </View>
-        <View style={styles.detailRow}>
-          <Navigation size={16} color="#9ca3af" />
-          <Text style={styles.detailText}>{item.postal_code}</Text>
-        </View>
-      </View>
-
-      <View style={styles.sessionFooter}>
-        <View style={styles.priceContainer}>
-          <Text style={styles.priceText}>
-            {item.pricePerSession 
-              ? `$${Math.round(item.pricePerSession)}/session` 
-              : item.pricePerHour 
-                ? `$${Math.round(item.pricePerHour)}/hour`
-                : 'Free'
+        <View style={styles.sessionDetails}>
+          <Text style={styles.sessionTypeText}>
+            {(item.classType === 'Individual' || item.classType === 'single')
+              ? 'Individual Session' 
+              : `Group Session${item.studentsAttending ? ` • ${item.studentsAttending}/${item.maxStudents} students` : ''}`
             }
           </Text>
+          <View style={styles.detailRow}>
+            <Clock size={16} color="#9ca3af" />
+            <Text style={styles.detailText}>{formatTime(item.time)} - {formatTime(item.endTime)} • {item.duration}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <MapPin size={16} color="#9ca3af" />
+            <Text style={styles.detailText}>{item.location}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Navigation size={16} color="#9ca3af" />
+            <Text style={styles.detailText}>{item.postal_code}</Text>
+          </View>
         </View>
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity
-            style={styles.viewButton}
-            onPress={() => handleViewDetails(item.id)}
-          >
-            <Eye size={16} color="#fb923c" />
-            <Text style={styles.viewButtonText}>View Details</Text>
-          </TouchableOpacity>
+
+        <View style={styles.sessionFooter}>
+          <View style={styles.priceContainer}>
+            <Text style={styles.priceText}>
+              {item.pricePerSession 
+                ? `$${Math.round(item.pricePerSession)}/session` 
+                : item.pricePerHour 
+                  ? `$${Math.round(item.pricePerHour)}/hour`
+                  : 'Free'
+              }
+            </Text>
+          </View>
           
-          {(item.classType === 'Individual' || item.classType === 'single') && (
+          <View style={styles.buttonContainer}>
             <TouchableOpacity
-              style={styles.rescheduleButton}
-              onPress={() => handleRescheduleSession(item.id)}
+              style={styles.viewButton}
+              onPress={() => handleViewDetails(item.id)}
             >
-              <Text style={styles.rescheduleButtonText}>Reschedule</Text>
+              <Eye size={16} color="#fb923c" />
+              <Text style={styles.viewButtonText}>View Details</Text>
             </TouchableOpacity>
-          )}
-          
-          <TouchableOpacity
-            style={styles.cancelButton}
-            onPress={() => handleCancelSession(item.id)}
-          >
-            <X size={16} color="#ef4444" />
-            <Text style={styles.cancelButtonText}>Cancel</Text>
-          </TouchableOpacity>
+            
+            {/* Only show reschedule and cancel buttons for booked sessions */}
+            {isBooked && (item.classType === 'Individual' || item.classType === 'single') && (
+              <TouchableOpacity
+                style={styles.rescheduleButton}
+                onPress={() => handleRescheduleSession(item.id)}
+              >
+                <Text style={styles.rescheduleButtonText}>Reschedule</Text>
+              </TouchableOpacity>
+            )}
+            
+            {isBooked && (
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => handleCancelSession(item.id)}
+              >
+                <X size={16} color="#ef4444" />
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   const renderCancelConfirmationModal = () => {
     if (!sessionToCancel) return null;
@@ -973,6 +1046,9 @@ const CoachCalendarPage = () => {
   const renderSessionDetailsModal = () => {
     if (!selectedSessionDetails) return null;
 
+    const isBooked = selectedSessionDetails.sessionStatus === 'confirmed' || selectedSessionDetails.sessionStatus === 'pubcon';
+    const isPublished = selectedSessionDetails.sessionStatus === 'published';
+
     return (
       <Modal
         visible={showSessionDetails}
@@ -997,6 +1073,18 @@ const CoachCalendarPage = () => {
               <View style={styles.modalCardHeader}>
                 <CalendarIcon size={20} color="#fb923c" />
                 <Text style={styles.modalCardTitle}>Session Information</Text>
+                {/* Booking Status Badge */}
+                <View style={[
+                  styles.bookingStatusBadge,
+                  isBooked ? styles.bookedBadge : styles.availableBadge
+                ]}>
+                  <Text style={[
+                    styles.bookingStatusText,
+                    isBooked ? styles.bookedStatusText : styles.availableStatusText
+                  ]}>
+                    {isBooked ? 'Booked' : 'Available'}
+                  </Text>
+                </View>
               </View>
               <View style={styles.modalCardContent}>
                 <Text style={styles.modalDetailText}>{selectedSessionDetails.sport}</Text>
@@ -1023,8 +1111,8 @@ const CoachCalendarPage = () => {
               </View>
             </View>
 
-            {/* Students Cards */}
-            {selectedSessionDetails.students?.map((student: any, index: number) => (
+            {/* Students Cards - Only show if session is booked */}
+            {isBooked && selectedSessionDetails.students?.map((student: any, index: number) => (
               <View key={student.id} style={styles.modalCard}>
                 <View style={styles.modalCardHeader}>
                   <User size={20} color="#fb923c" />
@@ -1070,7 +1158,7 @@ const CoachCalendarPage = () => {
                   </View>
                   <TouchableOpacity 
                     style={styles.chatButton}
-                    onPress={() => handleChatWithStudent(student.id)}
+                    onPress={() => handleChatWithStudent(student.id, student.name)}
                   >
                     <MessageCircle size={16} color="#fff" />
                     <Text style={styles.chatButtonText}>Chat First</Text>
@@ -1078,6 +1166,24 @@ const CoachCalendarPage = () => {
                 </View>
               </View>
             ))}
+
+            {/* No Students Message - Only show for published sessions */}
+            {isPublished && (
+              <View style={styles.modalCard}>
+                <View style={styles.modalCardHeader}>
+                  <Users size={20} color="#9ca3af" />
+                  <Text style={styles.modalCardTitle}>Enrollment Status</Text>
+                </View>
+                <View style={styles.modalCardContent}>
+                  <Text style={styles.modalDetailText}>
+                    No students enrolled yet
+                  </Text>
+                  <Text style={styles.modalDetailSubtext}>
+                    This session is available for students to book. You'll see student details here once they enroll.
+                  </Text>
+                </View>
+              </View>
+            )}
 
             {/* Session Description */}
             {selectedSessionDetails.description && (
@@ -1113,7 +1219,7 @@ const CoachCalendarPage = () => {
                   Max Students: {selectedSessionDetails.maxStudents}
                 </Text>
                 <Text style={styles.modalDetailSubtext}>
-                  Currently Enrolled: {selectedSessionDetails.studentsAttending}
+                  Currently Enrolled: {isBooked ? selectedSessionDetails.studentsAttending : 0}
                 </Text>
               </View>
             </View>
@@ -1220,6 +1326,14 @@ const CoachCalendarPage = () => {
       {renderCancelConfirmationModal()}
       {renderRescheduleModal()}
       {renderSessionDetailsModal()}
+      
+      {/* Chat Modal */}
+      <ChatModal
+        visible={!!selectedChatChannel}
+        onClose={() => setSelectedChatChannel(null)}
+        channelId={selectedChatChannel?.channelId}
+        chatPartnerName={selectedChatChannel?.studentName}
+      />
     </View>
   );
 };
@@ -1917,6 +2031,39 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#ffffff',
     textAlign: 'center',
+  },
+  // Booking status styles
+  sessionTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  bookingStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    minWidth: 70,
+    alignItems: 'center',
+  },
+  bookedBadge: {
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    borderWidth: 1,
+    borderColor: '#10b981',
+  },
+  availableBadge: {
+    backgroundColor: 'rgba(251, 146, 60, 0.1)',
+    borderWidth: 1,
+    borderColor: '#fb923c',
+  },
+  bookingStatusText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  bookedStatusText: {
+    color: '#10b981',
+  },
+  availableStatusText: {
+    color: '#fb923c',
   },
 });
 

@@ -44,19 +44,48 @@ export default function StudentSignupScreen2() {
   }
 
   try {
+    console.log('🔍 Frontend Debug - Starting Supabase Auth signup for:', email);
+    
+    // Test network connectivity to Supabase first
+    console.log('🔍 Frontend Debug - Testing Supabase connectivity...');
+    try {
+      const testResponse = await fetch('https://ezdbjkcrtepdihmyunzm.supabase.co/rest/v1/', {
+        method: 'GET',
+        headers: {
+          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV6ZGJqa2NydGVwZGlobXl1bnptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDY4MTIxNzksImV4cCI6MjA2MjM4ODE3OX0.E2NntRtnywLcVUa15IJBO6sR_sH0kT_Kr-UcqzVo-Sw',
+        },
+      });
+      console.log('🔍 Frontend Debug - Supabase connectivity test result:', testResponse.status);
+    } catch (testError) {
+      console.error('🔍 Frontend Debug - Supabase connectivity test failed:', testError);
+    }
+    
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
     });
 
+    console.log('🔍 Frontend Debug - Supabase Auth response:', { data, error });
+
     if (error) {
-      throw new Error(error.message);
+      console.error('❌ Frontend Debug - Supabase Auth error:', error);
+      console.error('❌ Frontend Debug - Error details:');
+      console.error('  - Message:', error.message);
+      console.error('  - Status:', error.status);
+      console.error('  - Code:', error.code);
+      console.error('  - Details:', error.details);
+      console.error('  - Hint:', error.hint);
+      console.error('  - Full error:', JSON.stringify(error, null, 2));
+      throw new Error(`Database error saving new user: ${error.message}`);
     }
 
     const userId = data?.user?.id;
 
     // Register metadata only if user exists
     if (userId) {
+      console.log('🔍 Frontend Debug - User created successfully, now calling registerStudent API');
+      console.log('🔍 Frontend Debug - User ID:', userId);
+      
       await registerStudent({
         id: userId,
         email,
@@ -67,6 +96,10 @@ export default function StudentSignupScreen2() {
         number,
         postal_code,
       });
+      
+      console.log('🔍 Frontend Debug - registerStudent API call completed successfully');
+    } else {
+      console.error('❌ Frontend Debug - No user ID received from Supabase Auth');
     }
 
     // ✅ Always show success alert and navigate to Login

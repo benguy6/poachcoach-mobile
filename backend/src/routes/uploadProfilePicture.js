@@ -38,4 +38,32 @@ router.post('/', verifySupabaseToken, upload.single('file'), async (req, res) =>
   }
 });
 
+router.delete('/', verifySupabaseToken, async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    // Delete from Cloudinary if exists
+    try {
+      await cloudinary.uploader.destroy(`avatars/user_${userId}`);
+    } catch (cloudinaryError) {
+      console.log('Cloudinary deletion failed (image may not exist):', cloudinaryError.message);
+    }
+
+    // Update database to set profile_picture to null
+    const { error: updateError } = await supabase
+      .from('Users')
+      .update({ profile_picture: null })
+      .eq('id', userId);
+
+    if (updateError) {
+      return res.status(500).json({ error: updateError.message });
+    }
+
+    return res.json({ message: 'Profile picture deleted successfully' });
+
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

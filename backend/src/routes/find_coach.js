@@ -4,7 +4,7 @@ const { supabase } = require('../supabaseClient');
 const { verifySupabaseToken } = require('../middleware/authMiddleware');
 
 
-router.get('/coaches', verifySupabaseToken, async (req, res) => {
+router.get('/published', verifySupabaseToken, async (req, res) => {
   try {
     console.log('Finding coaches with single, weekly recurring, and monthly recurring sessions (published and pubcon status)...');
 
@@ -213,6 +213,7 @@ router.get('/coaches', verifySupabaseToken, async (req, res) => {
         // Single Sessions info
         singleSessions: coachSingleSessions.map(session => ({
           id: session.id,
+          unique_id: session.unique_id,
           sessionType: session.session_type,
           start_time: session.start_time,
           end_time: session.end_time,
@@ -244,6 +245,7 @@ router.get('/coaches', verifySupabaseToken, async (req, res) => {
           } : null,
           individualSessions: group.sessions.map(session => ({
             id: session.id,
+            unique_id: session.unique_id,
             start_time: session.start_time,
             end_time: session.end_time,
             duration: session.duration,
@@ -274,6 +276,7 @@ router.get('/coaches', verifySupabaseToken, async (req, res) => {
           } : null,
           individualSessions: group.sessions.map(session => ({
             id: session.id,
+            unique_id: session.unique_id,
             start_time: session.start_time,
             end_time: session.end_time,
             duration: session.duration,

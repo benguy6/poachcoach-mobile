@@ -136,6 +136,8 @@ router.post('/registerStudentStep1', async (req, res) => {
 
 
 router.post('/signup-coach', async (req, res) => {
+  console.log('🔍 Coach Signup Debug - Request body:', req.body);
+  
   const {
     id,
     email,
@@ -148,6 +150,10 @@ router.post('/signup-coach', async (req, res) => {
     sport,
   } = req.body;
 
+  console.log('🔍 Coach Signup Debug - Extracted fields:', {
+    id, email, first_name, last_name, age, gender, number, postal_code, sport
+  });
+
   if (
     !id ||
     !email ||
@@ -159,10 +165,12 @@ router.post('/signup-coach', async (req, res) => {
     !postal_code ||
     !sport
   ) {
+    console.log('❌ Coach Signup Debug - Missing required fields');
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
   try {
+    console.log('🔍 Coach Signup Debug - Starting geolocation...');
     let address, latitude, longitude;
     try {
       const geoData = await getGeoFromPostalCode(postal_code.toString()); // Ensure postal_code is treated as a string
@@ -180,6 +188,11 @@ router.post('/signup-coach', async (req, res) => {
       latitude = 1.290270;
       longitude = 103.851959;
     }
+
+    console.log('🔍 Coach Signup Debug - About to insert into Users table with data:', {
+      id, email, first_name, last_name, age: age.toString(), gender, number, postal_code, address, 
+      latitude: latitude.toString(), longitude: longitude.toString(), role: 'coach'
+    });
 
     const { error: userErr } = await supabase.from('Users').insert([
       {
@@ -199,26 +212,48 @@ router.post('/signup-coach', async (req, res) => {
     ]);
 
     if (userErr) {
-      console.error('Error inserting into Users:', userErr.message);
-      return res.status(500).json({ error: userErr.message });
+      console.error('❌ Coach Signup Debug - Error inserting into Users:', userErr);
+      console.error('❌ Coach Signup Debug - Full error details:', JSON.stringify(userErr, null, 2));
+      return res.status(500).json({ error: `Database error saving new user: ${userErr.message}` });
     }
+
+    console.log('✅ Coach Signup Debug - Successfully inserted into Users table');
 
     const coachPayload = {
       id,
       sport,
     };
 
+    console.log('🔍 Coach Signup Debug - About to insert into Coaches table with data:', coachPayload);
+    
     const { error: coachErr } = await supabase.from('Coaches').insert([coachPayload]);
 
     if (coachErr) {
-      console.error('Error inserting into Coaches:', coachErr.message);
-      return res.status(500).json({ error: coachErr.message });
+      console.error('❌ Coach Signup Debug - Error inserting into Coaches:', coachErr);
+      console.error('❌ Coach Signup Debug - Full error details:', JSON.stringify(coachErr, null, 2));
+      return res.status(500).json({ error: `Database error saving coach data: ${coachErr.message}` });
+    }
+
+    console.log('✅ Coach Signup Debug - Successfully inserted into Coaches table');
+    
+    // Check if wallet was created automatically
+    const { data: wallet, error: walletError } = await supabase
+      .from('wallets')
+      .select('*')
+      .eq('user_id', id)
+      .single();
+      
+    if (walletError) {
+      console.log('⚠️ Coach Signup Debug - Wallet not found, this might be the issue:', walletError);
+    } else {
+      console.log('✅ Coach Signup Debug - Wallet created successfully:', wallet);
     }
 
     return res.status(201).json({ message: 'Coach registered successfully' });
   } catch (err) {
-    console.error('Coach signup error:', err.message);
-    return res.status(500).json({ error: 'Failed to create coach account' });
+    console.error('❌ Coach Signup Debug - Unexpected error:', err);
+    console.error('❌ Coach Signup Debug - Full error stack:', err.stack);
+    return res.status(500).json({ error: `Database error saving new user: ${err.message}` });
   }
 });
 
@@ -227,6 +262,8 @@ router.post('/signup-coach', async (req, res) => {
 
 
 router.post('/signup-student', async (req, res) => {
+  console.log('🔍 Student Signup Debug - Request body:', req.body);
+  
   const {
     id,
     email,
@@ -238,11 +275,17 @@ router.post('/signup-student', async (req, res) => {
     postal_code,
   } = req.body;
 
+  console.log('🔍 Student Signup Debug - Extracted fields:', {
+    id, email, first_name, last_name, age, gender, number, postal_code
+  });
+
   if (!id || !email || !first_name || !last_name || !age || !gender || !number || !postal_code) {
+    console.log('❌ Student Signup Debug - Missing required fields');
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
   try {
+    console.log('🔍 Student Signup Debug - Starting geolocation...');
     let address, latitude, longitude;
     try {
       const geoData = await getGeoFromPostalCode(postal_code); // Ensure postal_code is treated as a string
@@ -260,6 +303,11 @@ router.post('/signup-student', async (req, res) => {
       latitude = 1.290270;
       longitude = 103.851959;
     }
+
+    console.log('🔍 Student Signup Debug - About to insert into Users table with data:', {
+      id, email, first_name, last_name, age: age.toString(), gender, number, postal_code, address, 
+      latitude: latitude.toString(), longitude: longitude.toString(), role: 'student'
+    });
 
     const { error: userErr } = await supabase.from('Users').insert([
       {
@@ -279,18 +327,41 @@ router.post('/signup-student', async (req, res) => {
     ]);
 
     if (userErr) {
-      return res.status(500).json({ error: userErr.message });
+      console.error('❌ Student Signup Debug - Error inserting into Users:', userErr);
+      console.error('❌ Student Signup Debug - Full error details:', JSON.stringify(userErr, null, 2));
+      return res.status(500).json({ error: `Database error saving new user: ${userErr.message}` });
     }
+
+    console.log('✅ Student Signup Debug - Successfully inserted into Users table');
+    console.log('🔍 Student Signup Debug - About to insert into Students table with data:', { id });
 
     const { error: studentErr } = await supabase.from('Students').insert([{ id }]);
     if (studentErr) {
-      return res.status(500).json({ error: studentErr.message });
+      console.error('❌ Student Signup Debug - Error inserting into Students:', studentErr);
+      console.error('❌ Student Signup Debug - Full error details:', JSON.stringify(studentErr, null, 2));
+      return res.status(500).json({ error: `Database error saving student data: ${studentErr.message}` });
+    }
+
+    console.log('✅ Student Signup Debug - Successfully inserted into Students table');
+    
+    // Check if wallet was created automatically
+    const { data: wallet, error: walletError } = await supabase
+      .from('wallets')
+      .select('*')
+      .eq('user_id', id)
+      .single();
+      
+    if (walletError) {
+      console.log('⚠️ Student Signup Debug - Wallet not found, this might be the issue:', walletError);
+    } else {
+      console.log('✅ Student Signup Debug - Wallet created successfully:', wallet);
     }
 
     return res.status(201).json({ message: 'Student metadata stored successfully' });
   } catch (err) {
-    console.error('Student signup error:', err.message);
-    return res.status(500).json({ error: 'Failed to create student account' });
+    console.error('❌ Student Signup Debug - Unexpected error:', err);
+    console.error('❌ Student Signup Debug - Full error stack:', err.stack);
+    return res.status(500).json({ error: `Database error saving new user: ${err.message}` });
   }
 });
 

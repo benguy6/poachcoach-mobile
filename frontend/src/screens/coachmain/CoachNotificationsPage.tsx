@@ -12,9 +12,11 @@ import {
   RefreshControl,
   Alert,
 } from 'react-native';
+import LoadingOverlay from '../../components/LoadingOverlay';
 import { Bell, Calendar, MessageCircle, CreditCard, X, Check, Settings, Award, CheckCircle, XCircle } from 'lucide-react-native';
-import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead } from '../../services/api';
+import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification as deleteNotificationAPI } from '../../services/api';
 import { getToken } from '../../services/auth';
+import { useNotifications } from '../../hooks/useNotifications';
 
 type Notification = {
   id: number;
@@ -33,6 +35,7 @@ const CoachNotificationsPage = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const { fetchUnreadCount, markAsRead: updateNotificationCount, markAllAsRead: updateAllNotificationCount, decrementUnreadCount } = useNotifications();
 
   const [settings, setSettings] = useState({
     bookingRequests: true,
@@ -152,6 +155,8 @@ const CoachNotificationsPage = () => {
       setNotifications(prev =>
         prev.map(notif => (notif.id === id ? { ...notif, read: true } : notif))
       );
+      // Update the global notification count
+      updateNotificationCount();
     } catch (error) {
       console.error('Error marking notification as read:', error);
     }
@@ -166,13 +171,37 @@ const CoachNotificationsPage = () => {
       setNotifications(prev =>
         prev.map(notif => ({ ...notif, read: true }))
       );
+      // Update the global notification count
+      updateAllNotificationCount();
     } catch (error) {
       console.error('Error marking all notifications as read:', error);
     }
   };
 
-  const deleteNotification = (id: number) => {
-    setNotifications(prev => prev.filter(notif => notif.id !== id));
+  const deleteNotificationPermanently = async (id: number) => {
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      const notificationToDelete = notifications.find(notif => notif.id === id);
+      const wasUnread = notificationToDelete && !notificationToDelete.read;
+
+      // Call backend API to delete from database
+      const response = await deleteNotificationAPI(token, id.toString());
+      
+      // Remove from local state
+      setNotifications(prev => prev.filter(notif => notif.id !== id));
+      
+      // Update the global notification count if it was unread
+      if (wasUnread && response.wasUnread) {
+        decrementUnreadCount();
+      }
+      
+      console.log('Notification deleted successfully:', response);
+    } catch (error) {
+      console.error('Error deleting notification:', error);
+      Alert.alert('Error', 'Failed to delete notification');
+    }
   };
 
   const unreadCount = notifications.filter(n => !n.read).length;
@@ -230,7 +259,7 @@ const CoachNotificationsPage = () => {
         
         <TouchableOpacity 
           style={styles.deleteButton}
-          onPress={() => deleteNotification(notification.id)}
+          onPress={() => deleteNotificationPermanently(notification.id)}
         >
           <X size={16} color="#6b7280" />
         </TouchableOpacity>
@@ -244,6 +273,11 @@ const CoachNotificationsPage = () => {
 
   return (
     <SafeAreaView style={styles.container}>
+      <LoadingOverlay 
+        visible={loading} 
+        message="Loading notifications..." 
+      />
+      
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Notifications</Text>
         {unreadCount > 0 && (

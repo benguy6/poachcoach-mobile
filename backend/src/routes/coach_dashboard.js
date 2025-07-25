@@ -31,9 +31,9 @@ router.get('/', verifySupabaseToken, async (req, res) => {
       .from('Sessions')
       .select('*')
       .eq('coach_id', coach.id)
-      .eq('session_status', 'confirmed')
+      .in('session_status', ['pubcon', 'confirmed'])
       .order('start_time', { ascending: true })
-      .limit(3);
+      .limit(10);
 
     if (sessionError) {
       return res.status(500).json({ error: 'Failed to fetch sessions' });
@@ -113,6 +113,75 @@ router.post('/cancel-session', verifySupabaseToken, async (req, res) => {
       console.error('Cancel session error:', err);
       return res.status(500).json({ error: err.message });
     }
+});
+
+// Debug endpoint for coach dashboard
+router.get('/debug', verifySupabaseToken, async (req, res) => {
+  try {
+    const coachId = req.user.id;
+    console.log('🔍 DASHBOARD DEBUG: Fetching data for coach:', coachId);
+
+    // Get user info
+    const { data: user, error: userError } = await supabase
+      .from('Users')
+      .select('*')
+      .eq('id', coachId)
+      .single();
+
+    if (userError || !user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Get coach info
+    const { data: coach, error: coachError } = await supabase
+      .from('Coaches')
+      .select('*')
+      .eq('id', coachId)
+      .single();
+
+    // Get ALL sessions for this coach
+    const { data: allSessions, error: allSessionsError } = await supabase
+      .from('Sessions')
+      .select('*')
+      .eq('coach_id', coachId)
+      .order('date', { ascending: true })
+      .order('start_time', { ascending: true });
+
+    // Get sessions with different statuses
+    const { data: confirmedSessions, error: confirmedError } = await supabase
+      .from('Sessions')
+      .select('*')
+      .eq('coach_id', coachId)
+      .eq('session_status', 'confirmed');
+
+    const { data: pubconSessions, error: pubconError } = await supabase
+      .from('Sessions')
+      .select('*')
+      .eq('coach_id', coachId)
+      .eq('session_status', 'pubcon');
+
+    return res.json({
+      coachId,
+      user: user,
+      coach: coach,
+      allSessions: allSessions || [],
+      confirmedSessions: confirmedSessions || [],
+      pubconSessions: pubconSessions || [],
+      summary: {
+        totalSessions: allSessions?.length || 0,
+        confirmedCount: confirmedSessions?.length || 0,
+        pubconCount: pubconSessions?.length || 0,
+        statuses: allSessions?.reduce((acc, session) => {
+          acc[session.session_status] = (acc[session.session_status] || 0) + 1;
+          return acc;
+        }, {}) || {}
+      }
+    });
+
+  } catch (err) {
+    console.error('🔍 DASHBOARD DEBUG: Error:', err);
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;

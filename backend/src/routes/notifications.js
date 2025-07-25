@@ -132,4 +132,56 @@ router.put('/mark-all-read', verifySupabaseToken, async (req, res) => {
   }
 });
 
+// DELETE /notifications/:id - Delete a specific notification
+router.delete('/:id', verifySupabaseToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const notificationId = req.params.id;
+    console.log(`Deleting notification ${notificationId} for user ${userId}`);
+
+    // First check if the notification exists and belongs to the user
+    const { data: existingNotification, error: checkError } = await supabase
+      .from('notifications')
+      .select('id, is_read')
+      .eq('id', notificationId)
+      .eq('user_id', userId)
+      .single();
+
+    if (checkError) {
+      console.error('Error checking notification:', checkError);
+      return res.status(404).json({ error: 'Notification not found' });
+    }
+
+    if (!existingNotification) {
+      return res.status(404).json({ error: 'Notification not found or does not belong to user' });
+    }
+
+    // Delete the notification
+    const { data, error } = await supabase
+      .from('notifications')
+      .delete()
+      .eq('id', notificationId)
+      .eq('user_id', userId)
+      .select();
+
+    if (error) {
+      console.error('Error deleting notification:', error);
+      return res.status(500).json({ error: 'Failed to delete notification' });
+    }
+
+    console.log(`Notification ${notificationId} deleted successfully for user ${userId}`);
+
+    res.json({
+      success: true,
+      message: 'Notification deleted successfully',
+      deletedNotification: data[0],
+      wasUnread: !existingNotification.is_read
+    });
+
+  } catch (error) {
+    console.error('Error in delete notification route:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 module.exports = router;
