@@ -24,6 +24,21 @@ router.get('/', verifySupabaseToken, async (req, res) => {
 
     console.log('User fetched:', user);
 
+    // Debug: Check all student sessions for this user (without status filter)
+    const { data: allStudentSessions, error: allSSError } = await supabase
+      .from('Student_sessions')
+      .select('id, session_id, student_status, date')
+      .eq('student_id', userId);
+
+    console.log('All student sessions for user:', allStudentSessions);
+          console.log('Number of all student sessions:', allStudentSessions?.length || 0);
+      
+      // Debug: Check session_id values
+      if (allStudentSessions && allStudentSessions.length > 0) {
+        const sessionIds = [...new Set(allStudentSessions.map(ss => ss.session_id))];
+        console.log('Session IDs from Student_sessions:', sessionIds);
+      }
+
     // Get student sessions (both paid and unpaid) with dates
     const { data: studentSessions, error: ssError } = await supabase
       .from('Student_sessions')
@@ -37,20 +52,44 @@ router.get('/', verifySupabaseToken, async (req, res) => {
     }
 
     console.log('Student sessions fetched:', studentSessions);
+    console.log('Number of student sessions found:', studentSessions?.length || 0);
 
     let sessions = [];
     if (studentSessions && studentSessions.length > 0) {
       const sessionIds = studentSessions.map(ss => ss.session_id);
       const sessionDates = studentSessions.map(ss => ss.date);
 
-      // Get session details using session_id (not id) and matching dates
+      // Get session details using session_id (not id) - remove date filter to see all sessions
       const { data: sessionData, error: sessionError } = await supabase
         .from('Sessions')
         .select('*')
         .in('session_id', sessionIds)
-        .in('date', sessionDates)
         .order('date', { ascending: true })
         .order('start_time', { ascending: true });
+
+      // Filter out sessions that ended more than 15 minutes ago
+      const now = new Date();
+      const currentDate = now.toLocaleDateString('en-CA');
+      const currentTime = now.toTimeString().slice(0, 5);
+      
+      const filteredSessionData = sessionData.filter(session => {
+        // If session is today, check if it ended more than 15 minutes ago
+        if (session.date === currentDate) {
+          const sessionEndTime = session.end_time;
+          const [currentHour, currentMin] = currentTime.split(':').map(Number);
+          const [sessionEndHour, sessionEndMin] = sessionEndTime.split(':').map(Number);
+          
+          const currentTotalMinutes = currentHour * 60 + currentMin;
+          const sessionEndTotalMinutes = sessionEndHour * 60 + sessionEndMin;
+          const minutesAfterEnd = currentTotalMinutes - sessionEndTotalMinutes;
+          
+          // If session ended more than 15 minutes ago, exclude it
+          return minutesAfterEnd <= 15;
+        }
+        
+        // Keep future sessions
+        return session.date > currentDate;
+      });
 
       if (sessionError) {
         console.error('Sessions fetch error:', sessionError);
@@ -58,9 +97,35 @@ router.get('/', verifySupabaseToken, async (req, res) => {
       }
 
       console.log('Session data fetched:', sessionData);
+      console.log('Number of sessions found:', sessionData?.length || 0);
+      console.log('Filtered sessions found:', filteredSessionData?.length || 0);
+      console.log('Session IDs being searched:', sessionIds);
+      console.log('Session dates being searched:', sessionDates);
+      
+      // Debug: Show all found sessions
+      if (sessionData && sessionData.length > 0) {
+        console.log('All found sessions:');
+        sessionData.forEach((session, index) => {
+          console.log(`Session ${index + 1}:`, {
+            session_id: session.session_id,
+            date: session.date,
+            start_time: session.start_time,
+            end_time: session.end_time,
+            sport: session.sport
+          });
+        });
+      }
+      
+      // Debug: Check session statuses
+      if (filteredSessionData && filteredSessionData.length > 0) {
+        const statuses = [...new Set(filteredSessionData.map(s => s.session_status))];
+        console.log('Session statuses found:', statuses);
+        const dates = [...new Set(filteredSessionData.map(s => s.date))];
+        console.log('Session dates found:', dates);
+      }
 
       // Get unique coach IDs
-      const coachIds = [...new Set(sessionData.map(session => session.coach_id))];
+      const coachIds = [...new Set(filteredSessionData.map(session => session.coach_id))];
       
       // Fetch coach information
       const { data: coaches, error: coachesError } = await supabase
@@ -77,7 +142,7 @@ router.get('/', verifySupabaseToken, async (req, res) => {
 
       // Transform sessions with student status and coach info
       sessions = studentSessions.map(studentSession => {
-        const session = sessionData.find(s => 
+        const session = filteredSessionData.find(s => 
           s.session_id === studentSession.session_id && 
           s.date === studentSession.date
         );
@@ -151,13 +216,21 @@ router.post('/cancel-session', verifySupabaseToken, async (req, res) => {
     console.log('Session ID:', sessionId);
     console.log('Session Date:', sessionDate);
 
-    // Step 1: Find the specific student session
+    // Debug: Check all student sessions for this user
+    const { data: allStudentSessions, error: allSSError } = await supabase
+      .from('Student_sessions')
+      .select('id, student_id, session_id, student_status, date')
+      .eq('student_id', userId);
+
+    console.log('All student sessions for user:', allStudentSessions);
+    console.log('Student sessions with matching session_id:', allStudentSessions?.filter(ss => ss.session_id === sessionId));
+
+    // Step 1: Find the specific student session (remove date filter to debug)
     const { data: studentSession, error: ssError } = await supabase
       .from('Student_sessions')
       .select('id, student_id, session_id, student_status, date')
       .eq('student_id', userId)
       .eq('session_id', sessionId)
-      .eq('date', sessionDate)
       .single();
 
     if (ssError || !studentSession) {
@@ -167,16 +240,24 @@ router.post('/cancel-session', verifySupabaseToken, async (req, res) => {
 
     console.log('Found student session:', studentSession);
 
-    // Step 2: Get session details
+    // Step 2: Get session details (remove date filter to debug)
     const { data: sessionData, error: sessionError } = await supabase
       .from('Sessions')
       .select('session_id, start_time, end_time, date, class_type, session_type, session_status, price_per_session, students_attending, available_slots, max_students')
       .eq('session_id', sessionId)
-      .eq('date', sessionDate)
       .single();
 
     if (sessionError || !sessionData) {
       console.error('Session query error:', sessionError);
+      
+      // Debug: Check what sessions exist with this session_id
+      const { data: allSessionsWithId, error: allSessionsError } = await supabase
+        .from('Sessions')
+        .select('session_id, date, start_time, end_time')
+        .eq('session_id', sessionId);
+      
+      console.log('All sessions with this session_id:', allSessionsWithId);
+      
       return res.status(404).json({ error: 'Session not found' });
     }
 
@@ -336,6 +417,218 @@ router.post('/cancel-session', verifySupabaseToken, async (req, res) => {
   } catch (err) {
     console.error('Student cancel error:', err);
     return res.status(500).json({ error: err.message });
+  }
+});
+
+// Update session status endpoint
+router.post('/update-session-status', verifySupabaseToken, async (req, res) => {
+  const studentId = req.user.id;
+  const { sessionId, status } = req.body;
+
+  try {
+    console.log('=== UPDATE SESSION STATUS ===');
+    console.log('Student ID:', studentId);
+    console.log('Session ID:', sessionId);
+    console.log('New Status:', status);
+
+    // Verify the student is enrolled in this session
+    const { data: studentSession, error: studentSessionError } = await supabase
+      .from('Student_sessions')
+      .select('*')
+      .eq('student_id', studentId)
+      .eq('session_id', sessionId)
+      .single();
+
+    if (studentSessionError || !studentSession) {
+      console.error('Student session not found:', studentSessionError);
+      return res.status(404).json({ error: 'Session not found or student not enrolled' });
+    }
+
+    // Update the session status
+    const { error: updateError } = await supabase
+      .from('Sessions')
+      .update({ session_status: status })
+      .eq('session_id', sessionId);
+
+    if (updateError) {
+      console.error('Error updating session status:', updateError);
+      return res.status(500).json({ error: 'Failed to update session status' });
+    }
+
+    console.log('Session status updated successfully to:', status);
+    return res.json({ 
+      success: true, 
+      message: 'Session status updated successfully',
+      sessionId: sessionId,
+      newStatus: status
+    });
+
+  } catch (error) {
+    console.error('Update session status error:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /student/attendance-status - Get student's attendance status for active class
+router.post('/attendance-status', verifySupabaseToken, async (req, res) => {
+  const userId = req.user.id;
+  const { sessionId, studentId } = req.body;
+
+  try {
+    console.log('=== STUDENT ATTENDANCE STATUS REQUEST ===');
+    console.log('User ID:', userId);
+    console.log('Session ID:', sessionId);
+    console.log('Student ID:', studentId);
+
+    // Get student session record
+    const { data: studentSession, error: ssError } = await supabase
+      .from('Student_sessions')
+      .select('student_status')
+      .eq('id', sessionId) // Using sessionId as Student_sessions.id
+      .eq('student_id', studentId)
+      .single();
+
+    if (ssError || !studentSession) {
+      console.error('Student session not found:', ssError);
+      return res.status(404).json({ error: 'Student session not found' });
+    }
+
+    let status = 'pending';
+    let lateMinutes = 0;
+
+    // Determine status based on student_status
+    switch (studentSession.student_status) {
+      case 'attended':
+        status = 'present';
+        break;
+      case 'absent':
+        status = 'absent';
+        break;
+      case 'late':
+        status = 'late';
+        // Calculate late minutes (this would need to be stored or calculated)
+        lateMinutes = 5; // Default for now
+        break;
+      default:
+        status = 'pending';
+    }
+
+    console.log('Student attendance status:', { status, lateMinutes });
+
+    res.json({
+      success: true,
+      status,
+      lateMinutes
+    });
+
+  } catch (error) {
+    console.error('Error checking attendance status:', error);
+    res.status(500).json({ error: 'Failed to check attendance status' });
+  }
+});
+
+// POST /student/active-class-students - Get students for active class
+router.post('/active-class-students', verifySupabaseToken, async (req, res) => {
+  const userId = req.user.id;
+  const { sessionId } = req.body;
+
+  try {
+    console.log('=== ACTIVE CLASS STUDENTS REQUEST ===');
+    console.log('User ID:', userId);
+    console.log('Session ID:', sessionId);
+
+    // Get all students for this session
+    const { data: studentSessions, error: ssError } = await supabase
+      .from('Student_sessions')
+      .select('student_id, student_status')
+      .eq('id', sessionId); // Using sessionId as Student_sessions.id
+
+    if (ssError) {
+      console.error('Error fetching student sessions:', ssError);
+      return res.status(500).json({ error: 'Failed to fetch student sessions' });
+    }
+
+    if (!studentSessions || studentSessions.length === 0) {
+      return res.json({ success: true, students: [] });
+    }
+
+    // Get student details
+    const studentIds = studentSessions.map(ss => ss.student_id);
+    const { data: students, error: studentsError } = await supabase
+      .from('Users')
+      .select('id, first_name, last_name, email, profile_picture, gender')
+      .in('id', studentIds);
+
+    if (studentsError) {
+      console.error('Error fetching students:', studentsError);
+      return res.status(500).json({ error: 'Failed to fetch students' });
+    }
+
+    // Combine student data with payment status
+    const studentsWithPayment = students.map(student => {
+      const studentSession = studentSessions.find(ss => ss.student_id === student.id);
+      return {
+        id: student.id,
+        name: `${student.first_name} ${student.last_name}`,
+        email: student.email,
+        profilePicture: student.profile_picture,
+        gender: student.gender,
+        paymentStatus: studentSession?.student_status === 'paid' ? 'paid' : 'unpaid'
+      };
+    });
+
+    console.log('Students for active class:', studentsWithPayment.length);
+
+    res.json({
+      success: true,
+      students: studentsWithPayment
+    });
+
+  } catch (error) {
+    console.error('Error fetching active class students:', error);
+    res.status(500).json({ error: 'Failed to fetch active class students' });
+  }
+});
+
+// POST /student/submit-feedback - Submit student feedback
+router.post('/submit-feedback', verifySupabaseToken, async (req, res) => {
+  const userId = req.user.id;
+  const { sessionId, coachRating, classRating, feedback } = req.body;
+
+  try {
+    console.log('=== STUDENT FEEDBACK SUBMISSION ===');
+    console.log('User ID:', userId);
+    console.log('Session ID:', sessionId);
+    console.log('Coach Rating:', coachRating);
+    console.log('Class Rating:', classRating);
+
+    // Store feedback in database (you'll need to create a feedback table)
+    const { error: feedbackError } = await supabase
+      .from('Student_Feedback')
+      .insert({
+        student_id: userId,
+        session_id: sessionId,
+        coach_rating: coachRating,
+        class_rating: classRating,
+        feedback_text: feedback,
+        created_at: new Date().toISOString()
+      });
+
+    if (feedbackError) {
+      console.error('Error storing feedback:', feedbackError);
+      return res.status(500).json({ error: 'Failed to store feedback' });
+    }
+
+    console.log('Feedback submitted successfully');
+
+    res.json({
+      success: true,
+      message: 'Feedback submitted successfully'
+    });
+
+  } catch (error) {
+    console.error('Error submitting feedback:', error);
+    res.status(500).json({ error: 'Failed to submit feedback' });
   }
 });
 

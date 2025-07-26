@@ -12,8 +12,8 @@ router.get('/active-class', verifySupabaseToken, async (req, res) => {
     console.log('Coach ID:', coachId);
 
     const now = new Date();
-    const currentTime = now.toTimeString().slice(0, 5); // HH:MM format
-    const currentDate = now.toISOString().split('T')[0]; // YYYY-MM-DD format
+    const currentTime = now.toTimeString().slice(0, 5); // HH:MM format in local timezone
+    const currentDate = now.toLocaleDateString('en-CA'); // YYYY-MM-DD format in local timezone
 
     console.log('Current date:', currentDate);
     console.log('Current time:', currentTime);
@@ -165,6 +165,44 @@ router.post('/start-class', verifySupabaseToken, async (req, res) => {
     if (updateError) {
       console.error('Error updating session status:', updateError);
       return res.status(500).json({ error: 'Failed to start class' });
+    }
+
+    // Get students enrolled in this session to send notifications
+    const { data: studentSessions, error: studentSessionsError } = await supabase
+      .from('Student_sessions')
+      .select('student_id, student_status')
+      .eq('id', uniqueId)
+      .in('student_status', ['paid', 'unpaid']);
+
+    if (!studentSessionsError && studentSessions && studentSessions.length > 0) {
+      // Get student details for notifications
+      const studentIds = studentSessions.map(ss => ss.student_id);
+      const { data: students, error: studentsError } = await supabase
+        .from('Users')
+        .select('id, first_name, last_name, email')
+        .in('id', studentIds);
+
+      if (!studentsError && students) {
+        // Create notifications for each student
+        const notifications = students.map(student => ({
+          user_id: student.id,
+          title: 'Class Started!',
+          message: `Your ${session.sport} class with ${req.user.first_name} ${req.user.last_name} has started.`,
+          type: 'class_started',
+          session_id: uniqueId,
+          created_at: new Date().toISOString()
+        }));
+
+        const { error: notificationError } = await supabase
+          .from('notifications')
+          .insert(notifications);
+
+        if (notificationError) {
+          console.error('Error creating notifications:', notificationError);
+        } else {
+          console.log(`Created ${notifications.length} notifications for students`);
+        }
+      }
     }
 
     console.log('Class started successfully');
@@ -434,6 +472,183 @@ router.post('/submit-feedback', verifySupabaseToken, async (req, res) => {
   } catch (error) {
     console.error('Error submitting feedback:', error);
     res.status(500).json({ error: 'Failed to submit feedback' });
+  }
+});
+
+// Submit attendance for a class
+router.post('/submit-attendance', verifySupabaseToken, async (req, res) => {
+  const coachId = req.user.id;
+  const { sessionId, attendance } = req.body;
+
+  try {
+    console.log('=== SUBMIT ATTENDANCE ===');
+    console.log('Coach ID:', coachId);
+    console.log('Session ID:', sessionId);
+    console.log('Attendance:', attendance);
+
+    if (!sessionId || !attendance) {
+      return res.status(400).json({ error: 'Missing sessionId or attendance data' });
+    }
+
+    // Verify the session belongs to this coach
+    const { data: session, error: sessionError } = await supabase
+      .from('Sessions')
+      .select('unique_id, coach_id, session_status')
+      .eq('unique_id', sessionId)
+      .single();
+
+    if (sessionError || !session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    if (session.coach_id !== coachId) {
+      return res.status(403).json({ error: 'Not authorized to submit attendance for this session' });
+    }
+
+    // Get students enrolled in this session
+    const { data: studentSessions, error: studentSessionsError } = await supabase
+      .from('Student_sessions')
+      .select('id, student_id, student_status')
+      .eq('id', sessionId);
+
+    if (studentSessionsError) {
+      console.error('Error fetching student sessions:', studentSessionsError);
+      return res.status(500).json({ error: 'Failed to fetch student sessions' });
+    }
+
+    // Insert attendance records for each student
+    const attendanceRecords = [];
+    for (const studentSession of studentSessions) {
+      const studentAttendance = attendance[studentSession.student_id];
+      if (studentAttendance) {
+        attendanceRecords.push({
+          session_unique_id: sessionId,
+          student_id: studentSession.student_id,
+          coach_id: coachId,
+          status: studentAttendance,
+          submitted_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+      }
+    }
+
+    // Insert all attendance records
+    if (attendanceRecords.length > 0) {
+      const { error: attendanceError } = await supabase
+        .from('attendance')
+        .insert(attendanceRecords);
+
+      if (attendanceError) {
+        console.error('Error inserting attendance records:', attendanceError);
+        return res.status(500).json({ error: 'Failed to submit attendance' });
+      }
+    }
+
+    // Also update student session status for backward compatibility
+    const studentSessionUpdates = [];
+    for (const studentSession of studentSessions) {
+      const studentAttendance = attendance[studentSession.student_id];
+      if (studentAttendance) {
+        let newStatus = 'unpaid';
+        
+        // Map attendance status to student status
+        switch (studentAttendance) {
+          case 'present':
+          case 'late':
+            newStatus = 'attended';
+            break;
+          case 'absent':
+            newStatus = 'absent';
+            break;
+          default:
+            newStatus = 'unpaid';
+        }
+
+        studentSessionUpdates.push({
+          id: studentSession.id,
+          student_status: newStatus
+        });
+      }
+    }
+
+    // Update student sessions
+    if (studentSessionUpdates.length > 0) {
+      for (const update of studentSessionUpdates) {
+        const { error: updateError } = await supabase
+          .from('Student_sessions')
+          .update({ 
+            student_status: update.student_status
+          })
+          .eq('id', update.id);
+
+        if (updateError) {
+          console.error('Error updating student session:', updateError);
+          // Don't fail the entire request, just log the error
+        }
+      }
+    }
+
+    console.log('Attendance submitted successfully');
+
+    res.json({
+      success: true,
+      message: 'Attendance submitted successfully',
+      attendance: attendance,
+      updatedCount: studentSessionUpdates.length
+    });
+
+  } catch (error) {
+    console.error('Error submitting attendance:', error);
+    res.status(500).json({ error: 'Failed to submit attendance' });
+  }
+});
+
+// Update session status endpoint
+router.post('/update-session-status', verifySupabaseToken, async (req, res) => {
+  const coachId = req.user.id;
+  const { sessionId, status } = req.body;
+
+  try {
+    console.log('=== UPDATE SESSION STATUS (COACH) ===');
+    console.log('Coach ID:', coachId);
+    console.log('Session ID:', sessionId);
+    console.log('New Status:', status);
+
+    // Verify the coach owns this session
+    const { data: session, error: sessionError } = await supabase
+      .from('Sessions')
+      .select('*')
+      .eq('session_id', sessionId)
+      .eq('coach_id', coachId)
+      .single();
+
+    if (sessionError || !session) {
+      console.error('Session not found or coach not authorized:', sessionError);
+      return res.status(404).json({ error: 'Session not found or coach not authorized' });
+    }
+
+    // Update the session status
+    const { error: updateError } = await supabase
+      .from('Sessions')
+      .update({ session_status: status })
+      .eq('session_id', sessionId);
+
+    if (updateError) {
+      console.error('Error updating session status:', updateError);
+      return res.status(500).json({ error: 'Failed to update session status' });
+    }
+
+    console.log('Session status updated successfully to:', status);
+    return res.json({ 
+      success: true, 
+      message: 'Session status updated successfully',
+      sessionId: sessionId,
+      newStatus: status
+    });
+
+  } catch (error) {
+    console.error('Update session status error:', error);
+    return res.status(500).json({ error: error.message });
   }
 });
 

@@ -165,6 +165,7 @@ router.post('/book-session', verifySupabaseToken, async (req, res) => {
         id: sessionData.unique_id, // Use unique_id from Sessions table
         student_id: studentId,
         session_id: sessionData.session_id, // Use session_id from Sessions table
+        date: sessionData.date, // Add the session date
         student_status: 'paid'
       });
 
@@ -436,6 +437,7 @@ router.post('/book-recurring-session', verifySupabaseToken, async (req, res) => 
       id: session.unique_id, // Use unique_id from Sessions table
       student_id: studentId,
       session_id: session.session_id, // Use session_id from Sessions table
+      date: session.date, // Add the session date
       student_status: 'paid'
     }));
 
@@ -770,6 +772,7 @@ router.post('/book-weekly-session', verifySupabaseToken, async (req, res) => {
         id: session.unique_id, // Use unique_id from Sessions table
         student_id: studentId,
         session_id: session.session_id, // Use session_id from Sessions table
+        date: session.date, // Add the session date
         student_status: isPaidSession ? 'paid' : 'unpaid'
       };
     });

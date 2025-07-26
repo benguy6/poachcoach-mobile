@@ -113,6 +113,7 @@ router.post('/single-session', verifySupabaseToken, async (req, res) => {
           description,
           price_per_session,
           price_per_hour,
+          session_status: 'published', // Set default session status
         },
       ]);
 
@@ -189,6 +190,7 @@ router.post('/recurring-monthly', verifySupabaseToken, async (req, res) => {
       description: session.description,
       price_per_session: session.pricePerSession,
       price_per_hour: session.pricePerHour,
+      session_status: 'published', // Set default session status
     }));
 
     // Insert all individual sessions into Sessions table
@@ -280,6 +282,7 @@ router.post('/recurring-weekly', verifySupabaseToken, async (req, res) => {
         description: session.description,
         price_per_session: session.pricePerSession,
         price_per_hour: session.pricePerHour,
+        session_status: 'published', // Set default session status
       });
     }
 

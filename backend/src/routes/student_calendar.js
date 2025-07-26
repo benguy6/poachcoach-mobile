@@ -188,17 +188,38 @@ router.get('/sessions', verifySupabaseToken, async (req, res) => {
 
     // Step 8: Filter out sessions that have passed their end time
     const now = new Date();
+    const currentDate = now.toLocaleDateString('en-CA'); // YYYY-MM-DD format in local timezone
+    const currentTime = now.toTimeString().slice(0, 5); // HH:MM format in local timezone
+    
+    console.log('🔍 Backend Student Calendar Date Debug:');
+    console.log('Current Date (local):', currentDate);
+    console.log('Current Time (local):', currentTime);
+    
     const currentSessions = sessions.filter(session => {
-      // Create a datetime object for the session's end time
-      const sessionEndDateTime = new Date(`${session.date}T${session.endTime}`);
-      const isPastEndTime = now > sessionEndDateTime;
+      const sessionDate = session.date;
+      const sessionEndTime = session.endTime;
       
-      console.log(`Session ${session.id} on ${session.date} ends at ${session.endTime}`);
-      console.log(`Current time: ${now.toISOString()}`);
-      console.log(`Session end time: ${sessionEndDateTime.toISOString()}`);
-      console.log(`Is past end time: ${isPastEndTime}`);
+      console.log(`Session ${session.id} on ${sessionDate} ends at ${sessionEndTime}`);
       
-      return !isPastEndTime; // Keep sessions that haven't passed their end time
+      if (sessionDate > currentDate) {
+        return true; // Future date, keep session
+      } else if (sessionDate < currentDate) {
+        return false; // Past date, filter out
+      } else {
+        // Same date, compare times
+        const [hour1, min1] = currentTime.split(':').map(Number);
+        const [hour2, min2] = sessionEndTime.split(':').map(Number);
+        const currentMinutes = hour1 * 60 + min1;
+        const sessionEndMinutes = hour2 * 60 + min2;
+        
+        // Check if session ended more than 15 minutes ago
+        const minutesAfterEnd = currentMinutes - sessionEndMinutes;
+        const isEndedMoreThan15MinAgo = minutesAfterEnd > 15;
+        
+        const isActive = currentMinutes < sessionEndMinutes && !isEndedMoreThan15MinAgo;
+        console.log(`Same date comparison: ${currentMinutes} < ${sessionEndMinutes} = ${isActive}, ended more than 15 min ago: ${isEndedMoreThan15MinAgo}`);
+        return isActive;
+      }
     });
 
     console.log('=== FILTERED SESSIONS (AFTER TIME CHECK) ===');

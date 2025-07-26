@@ -49,10 +49,40 @@ router.get('/sessions', verifySupabaseToken, async (req, res) => {
     }
 
     // Filter out sessions that have already ended
-    const currentDateTime = new Date();
+    const now = new Date();
+    const currentDate = now.toLocaleDateString('en-CA'); // YYYY-MM-DD format in local timezone
+    const currentTime = now.toTimeString().slice(0, 5); // HH:MM format in local timezone
+    
+    console.log('🔍 Backend Date Debug:');
+    console.log('Current Date (local):', currentDate);
+    console.log('Current Time (local):', currentTime);
+    
     const activeSessions = sessions.filter(session => {
-      const sessionEndDateTime = new Date(`${session.date}T${session.end_time}`);
-      return sessionEndDateTime > currentDateTime;
+      // Compare dates first, then times
+      const sessionDate = session.date;
+      const sessionEndTime = session.end_time;
+      
+      console.log(`Session ${session.unique_id}: ${sessionDate} ${sessionEndTime}`);
+      
+      if (sessionDate > currentDate) {
+        return true; // Future date, keep session
+      } else if (sessionDate < currentDate) {
+        return false; // Past date, filter out
+      } else {
+        // Same date, compare times
+        const [hour1, min1] = currentTime.split(':').map(Number);
+        const [hour2, min2] = sessionEndTime.split(':').map(Number);
+        const currentMinutes = hour1 * 60 + min1;
+        const sessionEndMinutes = hour2 * 60 + min2;
+        
+        // Check if session ended more than 15 minutes ago
+        const minutesAfterEnd = currentMinutes - sessionEndMinutes;
+        const isEndedMoreThan15MinAgo = minutesAfterEnd > 15;
+        
+        const isActive = currentMinutes < sessionEndMinutes && !isEndedMoreThan15MinAgo;
+        console.log(`Same date comparison: ${currentMinutes} < ${sessionEndMinutes} = ${isActive}, ended more than 15 min ago: ${isEndedMoreThan15MinAgo}`);
+        return isActive;
+      }
     });
 
     console.log(`Found ${activeSessions.length} active sessions after filtering`);
@@ -253,21 +283,38 @@ router.get('/debug-sessions', verifySupabaseToken, async (req, res) => {
       .eq('session_status', 'confirmed');
 
     // Check current date/time
-    const currentDateTime = new Date();
-    console.log('🔍 DEBUG: Current date/time:', currentDateTime);
+    const now = new Date();
+    const currentDate = now.toLocaleDateString('en-CA'); // YYYY-MM-DD format in local timezone
+    const currentTime = now.toTimeString().slice(0, 5); // HH:MM format in local timezone
+    console.log('🔍 DEBUG: Current date/time (local):', currentDate, currentTime);
 
     // Check which sessions would be filtered out by date
     const futureSessions = allSessions?.filter(session => {
       if (!session.date || !session.end_time) return false;
-      const sessionEndDateTime = new Date(`${session.date}T${session.end_time}`);
-      return sessionEndDateTime > currentDateTime;
+      
+      const sessionDate = session.date;
+      const sessionEndTime = session.end_time;
+      
+      if (sessionDate > currentDate) {
+        return true; // Future date, keep session
+      } else if (sessionDate < currentDate) {
+        return false; // Past date, filter out
+      } else {
+        // Same date, compare times
+        const [hour1, min1] = currentTime.split(':').map(Number);
+        const [hour2, min2] = sessionEndTime.split(':').map(Number);
+        const currentMinutes = hour1 * 60 + min1;
+        const sessionMinutes = hour2 * 60 + min2;
+        
+        return currentMinutes < sessionMinutes;
+      }
     }) || [];
 
     console.log('🔍 DEBUG: Future sessions count:', futureSessions.length);
 
     return res.json({
       coachId,
-      currentDateTime: currentDateTime.toISOString(),
+      currentDateTime: `${currentDate} ${currentTime}`,
       allSessions: allSessions || [],
       pubconSessions: pubconSessions || [],
       confirmedSessions: confirmedSessions || [],
@@ -621,9 +668,9 @@ router.post('/reschedule-session', verifySupabaseToken, async (req, res) => {
     }
 
     // Step 3: Validate that new date is in the future (no preponing to earlier than current date)
-    const currentDate = new Date();
-    const newSessionDate = new Date(newDate);
-    if (newSessionDate <= currentDate) {
+    const now = new Date();
+    const currentDate = now.toLocaleDateString('en-CA'); // YYYY-MM-DD format in local timezone
+    if (newDate <= currentDate) {
       return res.status(400).json({ error: 'Sessions can only be postponed to future dates' });
     }
 
@@ -894,10 +941,27 @@ router.post('/handle-reschedule-response', verifySupabaseToken, async (req, res)
     console.log('Found rescheduled session:', session);
 
     // Step 3: Check if the response is before the session end time
-    const sessionEndDateTime = new Date(`${session.date}T${session.end_time}`);
-    const currentDateTime = new Date();
+    const now = new Date();
+    const currentDate = now.toLocaleDateString('en-CA'); // YYYY-MM-DD format in local timezone
+    const currentTime = now.toTimeString().slice(0, 5); // HH:MM format in local timezone
+    
+    const sessionDate = session.date;
+    const sessionEndTime = session.end_time;
+    
+    let isPastEndTime = false;
+    if (sessionDate < currentDate) {
+      isPastEndTime = true; // Past date
+    } else if (sessionDate === currentDate) {
+      // Same date, compare times
+      const [hour1, min1] = currentTime.split(':').map(Number);
+      const [hour2, min2] = sessionEndTime.split(':').map(Number);
+      const currentMinutes = hour1 * 60 + min1;
+      const sessionMinutes = hour2 * 60 + min2;
+      isPastEndTime = currentMinutes > sessionMinutes;
+    }
+    // Future date means not past end time
 
-    if (currentDateTime > sessionEndDateTime) {
+    if (isPastEndTime) {
       // Past session end time - automatically cancel and process refund
       await handleAutomaticCancellation(session, studentSession);
       return res.status(400).json({ 

@@ -68,7 +68,7 @@ const ChatModal: React.FC<ChatModalProps> = ({
         setChannel(channelInstance);
         
         // Load existing messages
-        const channelState = await channelInstance.query();
+        const channelState = await channelInstance.query({});
         const channelMessages = channelState.messages || [];
         
         // Get unique user IDs from messages to fetch their profile pictures
@@ -89,25 +89,37 @@ const ChatModal: React.FC<ChatModalProps> = ({
         }
         setUserProfiles(profiles);
         
-        setMessages(channelMessages.map((msg: any) => ({
-          id: msg.id,
-          text: msg.text || '',
-          user: {
-            id: msg.user?.id || '',
-            name: msg.user?.name || 'Unknown'
-          },
-          created_at: msg.created_at
-        })));
+        setMessages(channelMessages.map((msg: any) => {
+          const userProfile = profiles[msg.user?.id];
+          const displayName = userProfile 
+            ? `${userProfile.first_name || ''} ${userProfile.last_name || ''}`.trim() || 'Unknown'
+            : msg.user?.name || 'Unknown';
+          
+          return {
+            id: msg.id,
+            text: msg.text || '',
+            user: {
+              id: msg.user?.id || '',
+              name: displayName
+            },
+            created_at: msg.created_at
+          };
+        }));
         
         // Listen for new messages
         const handleNewMessage = (event: any) => {
           const newMsg = event.message;
+          const userProfile = profiles[newMsg.user?.id];
+          const displayName = userProfile 
+            ? `${userProfile.first_name || ''} ${userProfile.last_name || ''}`.trim() || 'Unknown'
+            : newMsg.user?.name || 'Unknown';
+          
           setMessages(prev => [...prev, {
             id: newMsg.id,
             text: newMsg.text || '',
             user: {
               id: newMsg.user?.id || '',
-              name: newMsg.user?.name || 'Unknown'
+              name: displayName
             },
             created_at: newMsg.created_at
           }]);
@@ -133,14 +145,7 @@ const ChatModal: React.FC<ChatModalProps> = ({
     setMessages([]);
     setNewMessage('');
     
-    const cleanup = loadChannel();
-    
-    // Cleanup on unmount or when channelId changes
-    return () => {
-      if (cleanup && typeof cleanup.then === 'function') {
-        cleanup.then(cleanupFn => cleanupFn && cleanupFn());
-      }
-    };
+    loadChannel();
   }, [visible, channelId]);
 
   const sendMessage = async () => {

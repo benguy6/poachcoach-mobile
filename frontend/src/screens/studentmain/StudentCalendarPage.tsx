@@ -697,11 +697,7 @@ const StudentCalendarPage = () => {
               </View>
             </View>
 
-            {/* Chat First Button */}
-            <TouchableOpacity style={styles.chatFirstButton}>
-              <MessageCircle size={20} color="white" />
-              <Text style={styles.chatFirstButtonText}>Chat First</Text>
-            </TouchableOpacity>
+
           </ScrollView>
         </View>
       </Modal>
@@ -1426,21 +1422,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontWeight: '500',
   },
-  chatFirstButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f97316',
-    paddingVertical: 16,
-    borderRadius: 12,
-    marginBottom: 20,
-    gap: 8,
-  },
-  chatFirstButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+
   // Cancel Modal styles
   cancelModalOverlay: {
     flex: 1,

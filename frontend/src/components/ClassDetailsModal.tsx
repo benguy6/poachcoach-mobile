@@ -185,10 +185,10 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
           {/* Students */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>
-              Students ({activeClass.students.length})
+              Students ({activeClass.students?.length || 0})
             </Text>
             <View style={styles.studentsContainer}>
-              {activeClass.students.map((student, index) => (
+              {activeClass.students?.map((student, index) => (
                 <View key={student.id} style={styles.studentCard}>
                   <Image
                     source={{

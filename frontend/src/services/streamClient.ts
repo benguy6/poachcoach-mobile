@@ -1,6 +1,7 @@
 import { StreamChat } from 'stream-chat';
 import { getStreamChatToken } from './api';
 import { getToken } from './auth';
+import { getUserProfile } from './userProfileService';
 
 // Initialize with default API key - this will be replaced if needed
 let streamChatClient = StreamChat.getInstance('f66tvjfhee3x');
@@ -12,9 +13,16 @@ export { streamChatClient };
 export const connectUser = async (userId: string, userToken?: string): Promise<void> => {
   try {
     if (userToken) {
+      // Get user profile to get the actual name
+      const userProfile = await getUserProfile(userId);
+      const displayName = userProfile 
+        ? `${userProfile.first_name || ''} ${userProfile.last_name || ''}`.trim() || `User ${userId}`
+        : `User ${userId}`;
+      
       await streamChatClient.connectUser(
         {
           id: userId,
+          name: displayName
         },
         userToken
       );
@@ -37,10 +45,16 @@ export const connectUser = async (userId: string, userToken?: string): Promise<v
         streamChatClient = StreamChat.getInstance(streamData.apiKey);
       }
       
+      // Get user profile to get the actual name
+      const userProfile = await getUserProfile(userId);
+      const displayName = userProfile 
+        ? `${userProfile.first_name || ''} ${userProfile.last_name || ''}`.trim() || `User ${userId}`
+        : `User ${userId}`;
+      
       await streamChatClient.connectUser(
         {
           id: userId,
-          name: `User ${userId}` // Add a name for better UX
+          name: displayName
         },
         streamData.token
       );

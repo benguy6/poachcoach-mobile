@@ -52,10 +52,13 @@ app.use(cors({
     'http://localhost:8081',
     'http://localhost:19006',
     'http://192.168.88.13:8081',
+    'http://172.20.10.3:8081',
+    'http://172.20.10.3:19006',
     'exp://localhost:19000',
     'exp://192.168.88.13:19000',
     'exp://192.168.88.13:8081',
-    'exp://172.20.10.3:19000'
+    'exp://172.20.10.3:19000',
+    'exp://172.20.10.3:8081'
   ],
   credentials: true
 }));
@@ -125,8 +128,10 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
-app.listen(PORT, 'localhost', async () => {
-  console.log(`Server is running at http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', async () => {
+  console.log(`Server is running at http://0.0.0.0:${PORT}`);
+  console.log(`Server is accessible at http://localhost:${PORT}`);
+  console.log(`Server is accessible at http://172.20.10.3:${PORT}`);
   
   // Check database tables on startup
   try {

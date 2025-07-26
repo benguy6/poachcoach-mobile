@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -58,6 +59,13 @@ const StudentWalletPage = ({ navigation }: StudentWalletPageProps) => {
   useEffect(() => {
     loadStudentData();
   }, []);
+
+  // Refresh data when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      loadStudentData();
+    }, [])
+  );
 
   const loadStudentData = async () => {
     try {

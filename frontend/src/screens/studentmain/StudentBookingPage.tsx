@@ -38,9 +38,10 @@ import BottomNavigation from '../../components/BottomNavigation';
 import SelectBookeeModal from '../../components/SelectBookeeModal';
 import ChatModal from '../../components/ChatModal';
 import PoachCoinIcon from '../../components/PoachCoinIcon';
-import { findCoaches, createChatChannel } from '../../services/api';
+import { findCoaches, createChatChannel, BACKEND_URL } from '../../services/api';
 import { getToken } from '../../services/auth';
 import { supabase } from '../../services/supabase';
+import { connectUser } from '../../services/streamClient';
 
 const { width, height } = Dimensions.get('window');
 
@@ -226,6 +227,28 @@ const StudentBookingPage = ({ route }: Props) => {
   // Debounce search query by 300ms
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
+  // Initialize chat connection when component mounts
+  useEffect(() => {
+    const initializeChat = async () => {
+      try {
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError || !sessionData.session) {
+          console.log('🔍 No active session for chat initialization');
+          return;
+        }
+
+        const studentId = sessionData.session.user.id;
+        console.log('🔍 Initializing chat connection for student:', studentId);
+        await connectUser(studentId);
+        console.log('✅ Chat connection initialized');
+      } catch (error) {
+        console.error('❌ Failed to initialize chat connection:', error);
+      }
+    };
+
+    initializeChat();
+  }, []);
+
   const applySearchFilters = (customQuery?: string) => {
     const query = customQuery || tempSearchQuery;
     setSearchQuery(query);
@@ -258,6 +281,12 @@ const StudentBookingPage = ({ route }: Props) => {
       const token = sessionData.session.access_token;
 
       console.log('🔍 Student ID:', studentId);
+      
+      // Connect user to Stream Chat before creating channel
+      console.log('🔍 Connecting user to Stream Chat...');
+      await connectUser(studentId);
+      console.log('✅ User connected to Stream Chat');
+      
       console.log('🔍 Creating chat channel...');
 
       // Create or get existing chat channel with proper coach info
@@ -353,7 +382,7 @@ const StudentBookingPage = ({ route }: Props) => {
           pricePerSession: selectedBookingSession.sessionDetails.pricePerSession
         };
 
-        response = await fetch(`http://192.168.88.13:3000/api/student_booking/book-session`, {
+        response = await fetch(`${BACKEND_URL}/api/student_booking/book-session`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -376,7 +405,7 @@ const StudentBookingPage = ({ route }: Props) => {
           sessionType: selectedBookingSession.sessionType
         };
 
-        response = await fetch(`http://192.168.88.13:3000/api/student_booking/book-recurring-session`, {
+        response = await fetch(`${BACKEND_URL}/api/student_booking/book-recurring-session`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -405,7 +434,7 @@ const StudentBookingPage = ({ route }: Props) => {
           paymentType: paymentType
         };
 
-        response = await fetch(`http://192.168.88.13:3000/api/student_booking/book-weekly-session`, {
+        response = await fetch(`${BACKEND_URL}/api/student_booking/book-weekly-session`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -435,7 +464,14 @@ const StudentBookingPage = ({ route }: Props) => {
         `Your session has been booked successfully. ${result.message || ''}`,
         [
           {
-            text: 'OK',
+            text: 'View Wallet',
+            onPress: () => {
+              // Navigate to wallet page to see updated balance
+              (navigation as any).navigate('StudentWallet');
+            }
+          },
+          {
+            text: 'Continue Browsing',
             onPress: () => {
               // Refresh coaches data to reflect updated session status
               loadCoaches();
@@ -1218,10 +1254,10 @@ const StudentBookingPage = ({ route }: Props) => {
     // Navigate to the selected tab's screen
     switch (tabId) {
       case 'StudentHome':
-        (navigation as any).navigate('StudentHomePage');
+        (navigation as any).navigate('StudentHome');
         break;
       case 'StudentCalendar':
-        (navigation as any).navigate('StudentCalendarPage');
+        (navigation as any).navigate('StudentCalendar');
         break;
       case 'StudentBooking':
         // Already on booking page
@@ -1230,7 +1266,7 @@ const StudentBookingPage = ({ route }: Props) => {
         (navigation as any).navigate('StudentChat');
         break;
       case 'StudentWallet':
-        (navigation as any).navigate('StudentWalletPage');
+        (navigation as any).navigate('StudentWallet');
         break;
     }
   }

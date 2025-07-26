@@ -13,10 +13,16 @@ export const getUserProfile = async (userId: string): Promise<UserProfile | null
       .from('Users')
       .select('id, profile_picture, first_name, last_name')
       .eq('id', userId)
-      .single();
+      .maybeSingle(); // Use maybeSingle() instead of single() to handle no results gracefully
 
     if (error) {
       console.error('Error fetching user profile:', error);
+      return null;
+    }
+
+    // If no user found, return null
+    if (!data) {
+      console.log(`No user profile found for userId: ${userId}`);
       return null;
     }
 

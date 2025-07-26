@@ -19,6 +19,9 @@ import { useRecentMessages } from '../../hooks/useRecentMessages';
 import { useNotificationContext } from '../../context/NotificationContext';
 import ChatModal from '../../components/ChatModal';
 import LoadingOverlay from '../../components/LoadingOverlay';
+import ActiveClassBanner from '../../components/ActiveClassBanner';
+import ClassStartedModal from '../../components/ClassStartedModal';
+import StudentAutomaticClassStartedModal from '../../components/StudentAutomaticClassStartedModal';
 
 interface Chat {
   id: number;
@@ -44,6 +47,22 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
     name: string;
   } | null>(null);
   
+  // Countdown state
+  const [countdown, setCountdown] = useState<string>('');
+  const [activeClass, setActiveClass] = useState<any>(null);
+  
+  // Automatic class started modal state
+  const [showAutomaticClassModal, setShowAutomaticClassModal] = useState(false);
+  const [automaticClassSession, setAutomaticClassSession] = useState<any>(null);
+  const [automaticClassStudents, setAutomaticClassStudents] = useState<any[]>([]);
+  
+  // Class started modal state
+  const [showClassStartedModal, setShowClassStartedModal] = useState(false);
+  const [classStartedInfo, setClassStartedInfo] = useState<any>(null);
+  const [showStudentAutomaticModal, setShowStudentAutomaticModal] = useState(false);
+  const [studentAutomaticClassStudents, setStudentAutomaticClassStudents] = useState<any[]>([]);
+  const [currentStudentId, setCurrentStudentId] = useState<string>('');
+  
   // Use the real recent messages hook
   const { messages: recentMessages, loading: messagesLoading } = useRecentMessages(2);
   
@@ -64,7 +83,8 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
 
           setFirstName(dashboard.user?.name || 'Student'); 
           setSessions(dashboard.sessions || []);
-          setProfilePicture(dashboard.user?.profilePicture|| undefined); 
+          setProfilePicture(dashboard.user?.profilePicture|| undefined);
+          setCurrentStudentId(dashboard.user?.id || ''); 
         } catch (error) {
           console.error('Failed to fetch dashboard info', error);
         } finally {
@@ -75,6 +95,264 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
       fetchDashboard();
     }, [])
   );
+
+  // Calculate countdown for next class
+  const calculateCountdown = () => {
+    const nextClass = getNextUpcomingClass();
+    if (!nextClass) {
+      setCountdown('');
+      return;
+    }
+
+    const now = new Date();
+    const sessionDate = nextClass.date || nextClass.session_date;
+    const sessionTime = nextClass.start_time;
+    
+    // Create session datetime
+    const sessionDateTime = new Date(`${sessionDate}T${sessionTime}`);
+    const timeDiff = sessionDateTime.getTime() - now.getTime();
+    
+    if (timeDiff <= 0) {
+      setCountdown('');
+      return;
+    }
+    
+    const hours = Math.floor(timeDiff / (1000 * 60 * 60));
+    const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000);
+    
+    const countdownText = `+${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    setCountdown(countdownText);
+  };
+
+  // Check for automatic class triggering
+  const checkForAutomaticClassStart = () => {
+    const nextClass = getNextUpcomingClass();
+    if (!nextClass) {
+      console.log('🔍 Student - No next class found for automatic start check');
+      return;
+    }
+
+    const now = new Date();
+    const currentDate = now.toLocaleDateString('en-CA');
+    const currentTime = now.toTimeString().slice(0, 5);
+    const sessionDate = nextClass.date || nextClass.session_date;
+    const sessionTime = nextClass.start_time;
+
+    console.log('🔍 Student - Automatic class start check:');
+    console.log('Current date:', currentDate);
+    console.log('Current time:', currentTime);
+    console.log('Session date:', sessionDate);
+    console.log('Session time:', sessionTime);
+    console.log('Date match:', sessionDate === currentDate);
+    console.log('Time check:', isTimeGreaterOrEqual(currentTime, sessionTime));
+
+    // Check if it's time to start the class
+    if (sessionDate === currentDate && isTimeGreaterOrEqual(currentTime, sessionTime)) {
+      console.log('🔍 Student - Automatic class start triggered!');
+      console.log('Session:', nextClass);
+      
+      // Set the session and students for the modal
+      setAutomaticClassSession(nextClass);
+      setAutomaticClassStudents(nextClass.students || []);
+      setShowAutomaticClassModal(true);
+    } else {
+      console.log('🔍 Student - Not time to start class yet');
+    }
+  };
+
+  // Check for active class
+  const checkActiveClass = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) return;
+
+      // Check if there's a currently running class
+      const currentDate = new Date().toLocaleDateString('en-CA');
+      const currentTime = new Date().toTimeString().slice(0, 5);
+      
+      console.log('🔍 Student - Frontend Active Class Check:');
+      console.log('Current date:', currentDate);
+      console.log('Current time:', currentTime);
+      console.log('Total sessions:', sessions?.length || 0);
+      
+      if (!sessions || sessions.length === 0) {
+        console.log('No sessions available, setting active class to null');
+        setActiveClass(null);
+        return;
+      }
+
+      // Find currently running class from sessions
+      const currentlyRunningClass = sessions.find(session => {
+        const sessionDate = session.date || session.session_date;
+        const sessionStartTime = session.start_time;
+        const sessionEndTime = session.end_time;
+        
+        // Check if session is today and currently running
+        if (sessionDate === currentDate) {
+          const isStarted = isTimeGreaterOrEqual(currentTime, sessionStartTime);
+          const isEnded = isTimeGreaterOrEqual(currentTime, sessionEndTime);
+          return isStarted && !isEnded;
+        }
+        return false;
+      });
+
+      console.log('Currently running class found:', currentlyRunningClass);
+      setActiveClass(currentlyRunningClass || null);
+      
+      // If there's an active class, fetch students and show student modal
+      if (currentlyRunningClass) {
+        try {
+          const { data: { session: authSession } } = await supabase.auth.getSession();
+          const token = authSession?.access_token;
+          if (!token) return;
+
+          const response = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL || 'http://172.20.10.3:3000'}/api/student/active-class-students`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              sessionId: currentlyRunningClass.unique_id || currentlyRunningClass.id,
+            }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            setStudentAutomaticClassStudents(data.students || []);
+            setShowStudentAutomaticModal(true);
+          }
+        } catch (error) {
+          console.error('Error fetching active class students:', error);
+        }
+      }
+    } catch (error) {
+      console.error('Error checking active class:', error);
+    }
+  };
+
+  // Helper functions
+  const getNextUpcomingClass = () => {
+    if (!sessions || sessions.length === 0) return null;
+
+    const now = new Date();
+    const currentDate = now.toLocaleDateString('en-CA');
+    const currentTime = now.toTimeString().slice(0, 5);
+
+    console.log('🔍 Student - Filtering upcoming classes...');
+    console.log('Current date:', currentDate);
+    console.log('Current time:', currentTime);
+    console.log('Total sessions:', sessions?.length || 0);
+    console.log('All sessions data:', sessions);
+
+    // Filter sessions that are in the future or ended less than 15 minutes ago
+    const upcomingSessions = sessions.filter(session => {
+      const sessionDate = session.date || session.session_date;
+      const sessionStartTime = session.start_time;
+      const sessionEndTime = session.end_time;
+      
+      console.log('Session:', {
+        date: sessionDate,
+        startTime: sessionStartTime,
+        endTime: sessionEndTime,
+        session_name: session.session_name,
+        raw_session: session
+      });
+      
+      // If session is today, check if it's in the future or ended less than 15 minutes ago
+      if (sessionDate === currentDate) {
+        const isFuture = !isTimeGreaterOrEqual(currentTime, sessionStartTime);
+        
+        // Check if session ended more than 15 minutes ago
+        const isEndedMoreThan15MinAgo = isTimeGreaterOrEqual(currentTime, sessionEndTime) && 
+          isTimeGreaterOrEqual(currentTime, addMinutesToTime(sessionEndTime, 15));
+        
+        console.log('Today session, is future:', isFuture, 'ended more than 15 min ago:', isEndedMoreThan15MinAgo);
+        return isFuture && !isEndedMoreThan15MinAgo;
+      }
+      
+      // If session is in the future, include it
+      const isFutureDate = sessionDate > currentDate;
+      console.log('Future date session:', isFutureDate);
+      console.log('Session date:', sessionDate, 'Current date:', currentDate, 'Comparison:', sessionDate > currentDate);
+      
+      // Temporary: Include all future sessions regardless of date format
+      if (sessionDate && sessionDate !== currentDate) {
+        console.log('Including session with date:', sessionDate);
+        return true;
+      }
+      
+      return isFutureDate;
+    });
+
+    console.log('Upcoming sessions found:', upcomingSessions.length);
+
+    // Sort by date first, then by time
+    upcomingSessions.sort((a, b) => {
+      const dateA = a.date || a.session_date;
+      const dateB = b.date || b.session_date;
+      
+      if (dateA !== dateB) {
+        return dateA.localeCompare(dateB);
+      }
+      
+      // If same date, sort by start time
+      return (a.start_time || '').localeCompare(b.start_time || '');
+    });
+
+    // Return the closest upcoming session
+    const nextClass = upcomingSessions.length > 0 ? upcomingSessions[0] : null;
+    console.log('Next upcoming class for student:', nextClass);
+    return nextClass;
+  };
+
+  const isTimeGreaterOrEqual = (time1: string, time2: string): boolean => {
+    const [hour1, min1] = time1.split(':').map(Number);
+    const [hour2, min2] = time2.split(':').map(Number);
+    
+    const minutes1 = hour1 * 60 + min1;
+    const minutes2 = hour2 * 60 + min2;
+    
+    console.log('🔍 Student - Time Comparison Debug:');
+    console.log('Time1:', time1, '->', hour1, ':', min1, '->', minutes1, 'minutes');
+    console.log('Time2:', time2, '->', hour2, ':', min2, '->', minutes2, 'minutes');
+    console.log('Result:', minutes1 >= minutes2);
+    
+    return minutes1 >= minutes2;
+  };
+
+  const addMinutesToTime = (time: string, minutesToAdd: number): string => {
+    const [hour, min] = time.split(':').map(Number);
+    const totalMinutes = hour * 60 + min + minutesToAdd;
+    const newHour = Math.floor(totalMinutes / 60);
+    const newMin = totalMinutes % 60;
+    return `${newHour.toString().padStart(2, '0')}:${newMin.toString().padStart(2, '0')}`;
+  };
+
+  // Continuous checking for automatic class start and active class
+  useEffect(() => {
+    if (!sessions || sessions.length === 0) return;
+
+    const interval = setInterval(() => {
+      checkForAutomaticClassStart();
+      checkActiveClass();
+    }, 10000); // Check every 10 seconds
+
+    return () => clearInterval(interval);
+  }, [sessions]);
+
+  // Countdown timer effect
+  useEffect(() => {
+    calculateCountdown();
+    
+    const countdownInterval = setInterval(() => {
+      calculateCountdown();
+    }, 1000); // Update every second
+    
+    return () => clearInterval(countdownInterval);
+  }, [sessions]);
 
   // Remove static chats data - now using real data from useRecentMessages hook
 
@@ -97,6 +375,23 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
     navigation.navigate('StudentProfile', {
       onProfilePicChange: (newUrl: string) => setProfilePicture(newUrl),
     });
+  };
+
+  const handleBannerPress = () => {
+    if (activeClass) {
+      // For students, show the class started modal when banner is pressed
+      setClassStartedInfo({
+        sport: activeClass.session_name || activeClass.class_type,
+        coachName: activeClass.coach_name || 'Coach',
+        startTime: activeClass.start_time,
+        endTime: activeClass.end_time,
+        location: activeClass.location || activeClass.address,
+        date: activeClass.date || activeClass.session_date
+      });
+      // Set students data if available
+      setAutomaticClassStudents(activeClass.students || []);
+      setShowClassStartedModal(true);
+    }
   };
 
   return (
@@ -183,11 +478,18 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
                     <View style={styles.classDetails}>
                       <View style={styles.classHeader}>
                         <Text style={styles.className}>{session.session_name || 'Session'}</Text>
-                        {isToday && (
-                          <View style={styles.todayBadge}>
-                            <Text style={styles.todayText}>Today</Text>
-                          </View>
-                        )}
+                        <View style={styles.classHeaderRow}>
+                          {isToday && (
+                            <View style={styles.todayBadge}>
+                              <Text style={styles.todayText}>Today</Text>
+                            </View>
+                          )}
+                          {countdown && (
+                            <View style={styles.countdownBadge}>
+                              <Text style={styles.countdownText}>{countdown}</Text>
+                            </View>
+                          )}
+                        </View>
                       </View>
                       <Text style={styles.instructorName}>With {session.coach_name || 'Coach'}</Text>
                       <View style={styles.classInfo}>
@@ -270,12 +572,49 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
         </View>
       </ScrollView>
       
+      {/* Active Class Banner */}
+      {activeClass && (
+        <ActiveClassBanner
+          activeClass={activeClass}
+          onPress={handleBannerPress}
+          onEndClass={() => {}} // Students don't end classes
+        />
+      )}
+      {console.log('🔍 Student ActiveClassBanner render check:', { hasActiveClass: !!activeClass, activeClassId: activeClass?.id })}
+      
       {/* Chat Modal */}
       <ChatModal
         visible={!!selectedChatChannel}
         onClose={() => setSelectedChatChannel(null)}
         channelId={selectedChatChannel?.channelId}
         chatPartnerName={selectedChatChannel?.name}
+      />
+
+      {/* Class Started Modal */}
+      <ClassStartedModal
+        visible={showClassStartedModal}
+        classInfo={classStartedInfo}
+        students={automaticClassStudents}
+        onClose={() => setShowClassStartedModal(false)}
+        onJoinClass={() => {
+          console.log('Student joined class');
+          setShowClassStartedModal(false);
+        }}
+        onRecordAttendance={() => {
+          console.log('Record attendance for students');
+          // For students, this could open a different modal or navigate to attendance page
+          // The attendance data is handled within the modal component
+          setShowClassStartedModal(false);
+        }}
+      />
+
+      {/* Student Automatic Class Started Modal */}
+      <StudentAutomaticClassStartedModal
+        visible={showStudentAutomaticModal}
+        session={activeClass}
+        students={studentAutomaticClassStudents}
+        currentStudentId={currentStudentId}
+        onClose={() => setShowStudentAutomaticModal(false)}
       />
       
       <BottomNavigation
@@ -423,6 +762,27 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 4,
+  },
+  classHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  countdownBadge: {
+    backgroundColor: '#f97316',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  countdownText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: 'white',
   },
   className: {
     fontSize: 20,

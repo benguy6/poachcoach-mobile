@@ -56,28 +56,30 @@ const ActiveClassBanner: React.FC<ActiveClassBannerProps> = ({
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    top: 100,
+    bottom: 200, // Position above navigation bar
     left: 16,
     right: 16,
     zIndex: 1000,
   },
   banner: {
     backgroundColor: '#1f2937',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 16,
+    padding: 20,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 8,
     },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 12,
     borderLeftWidth: 4,
     borderLeftColor: '#22c55e',
+    borderWidth: 1,
+    borderColor: '#374151',
   },
   leftContent: {
     flexDirection: 'row',

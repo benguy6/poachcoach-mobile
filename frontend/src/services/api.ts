@@ -1,4 +1,132 @@
-export const BACKEND_URL = "http://192.168.88.13:3000"; // Update as needed
+export const BACKEND_URL = "http://172.20.10.3:3000"; // Update as needed
+
+// Test backend connectivity
+export const testBackendConnectivity = async () => {
+  try {
+    console.log('🔍 Testing backend connectivity...');
+    const response = await fetch(`${BACKEND_URL}/`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (response.ok) {
+      console.log('✅ Backend is reachable');
+      return true;
+    } else {
+      console.log('⚠️ Backend responded but with error status:', response.status);
+      return false;
+    }
+  } catch (error: any) {
+    console.error('❌ Backend connectivity test failed:', error.message);
+    return false;
+  }
+};
+
+// Helper function to make API calls with automatic token refresh
+async function makeAuthenticatedRequest(
+  url: string, 
+  options: RequestInit, 
+  timeoutMs: number = 10000
+): Promise<Response> {
+  try {
+    // First attempt with current token
+    const response = await fetchWithTimeout(url, options, timeoutMs);
+    
+    // If response is 401 (Unauthorized), try with refreshed token
+    if (response.status === 401) {
+      console.log('🔄 Token expired, attempting refresh...');
+      const refreshedToken = await refreshSession();
+      
+      if (refreshedToken) {
+        // Retry with refreshed token
+        const newOptions = {
+          ...options,
+          headers: {
+            ...options.headers,
+            Authorization: `Bearer ${refreshedToken}`
+          }
+        };
+        
+        console.log('🔄 Retrying with refreshed token...');
+        const retryResponse = await fetchWithTimeout(url, newOptions, timeoutMs);
+        
+        if (retryResponse.status === 401) {
+          const authHandled = await handleAuthError(new Error('Authentication failed even after token refresh'));
+          if (!authHandled) {
+            throw new Error('Authentication failed - please log in again');
+          }
+        }
+        
+        return retryResponse;
+      } else {
+        const authHandled = await handleAuthError(new Error('Failed to refresh authentication token'));
+        if (!authHandled) {
+          throw new Error('Authentication failed - please log in again');
+        }
+      }
+    }
+    
+    return response;
+  } catch (error: any) {
+    if (error.message.includes('Invalid or expired token')) {
+      console.log('🔄 Token error detected, attempting refresh...');
+      const refreshedToken = await refreshSession();
+      
+      if (refreshedToken) {
+        const newOptions = {
+          ...options,
+          headers: {
+            ...options.headers,
+            Authorization: `Bearer ${refreshedToken}`
+          }
+        };
+        
+        console.log('🔄 Retrying with refreshed token...');
+        return await fetchWithTimeout(url, newOptions, timeoutMs);
+      } else {
+        const authHandled = await handleAuthError(error);
+        if (!authHandled) {
+          throw new Error('Authentication failed - please log in again');
+        }
+      }
+    }
+    
+    throw error;
+  }
+}
+
+// Utility function to create a fetch request with timeout
+async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number = 10000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    console.log(`🌐 Attempting to fetch: ${url}`);
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    console.log(`✅ Request successful: ${url}`);
+    return response;
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    console.error(`❌ Request failed: ${url}`, error);
+    
+    if (error.name === 'AbortError') {
+      throw new Error('Network request timed out');
+    }
+    
+    // Check for network connectivity issues
+    if (error.message && error.message.includes('Network request failed')) {
+      throw new Error('Network connectivity issue. Please check your internet connection.');
+    }
+    
+    throw error;
+  }
+}
 
 async function post(endpoint: string, body: any) {
   const url = `${BACKEND_URL}${endpoint}`;
@@ -6,7 +134,7 @@ async function post(endpoint: string, body: any) {
   console.log(`Body:`, body);
 
   try {
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -108,10 +236,27 @@ export const getCoachDashboard = async (token: string) => {
 };
 
 export const getStudentDashboard = async (token: string) => {
-  const res = await fetch(`${BACKEND_URL}/api/student/dashboard`, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  return res.json();
+  console.log('🔍 Fetching student dashboard...');
+  const url = `${BACKEND_URL}/api/student/dashboard`;
+  
+  try {
+    const res = await makeAuthenticatedRequest(url, {
+      headers: { Authorization: `Bearer ${token}` }
+    }, 10000);
+    
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error('❌ Student dashboard fetch failed:', errorText);
+      throw new Error(errorText || 'Failed to fetch dashboard');
+    }
+    
+    const data = await res.json();
+    console.log('✅ Student dashboard fetched successfully:', data);
+    return data;
+  } catch (error) {
+    console.error('❌ Student dashboard error:', error);
+    throw error;
+  }
 };
 
 export const getUserRole = async (token: string | undefined) => {
@@ -140,7 +285,7 @@ export const getUserRole = async (token: string | undefined) => {
 };
 
 
-import { getToken } from './auth';
+import { getToken, refreshSession, handleAuthError } from './auth';
 
 export const uploadProfilePicture = async (uri: string) => {
   const token = await getToken();
@@ -519,110 +664,145 @@ export const getNotifications = async (token: string) => {
   const url = `${BACKEND_URL}/api/notifications`;
   console.log(`GET ${url}`);
 
-  const res = await fetch(url, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  try {
+    const res = await makeAuthenticatedRequest(url, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
 
-  if (!res.ok) {
-    const errorText = await res.text();
-    console.error(`Failed to fetch notifications:`, errorText);
-    throw new Error(errorText || 'Failed to fetch notifications');
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error(`Failed to fetch notifications:`, errorText);
+      throw new Error(errorText || 'Failed to fetch notifications');
+    }
+
+    const data = await res.json();
+    console.log(`Notifications fetched successfully:`, data);
+    return data;
+  } catch (error: any) {
+    if (error.message === 'Network request timed out') {
+      console.error('Request timed out while fetching notifications');
+    }
+    throw error;
   }
-
-  const data = await res.json();
-  console.log(`Notifications fetched successfully:`, data);
-  return data;
 };
 
 export const getUnreadNotificationCount = async (token: string) => {
   const url = `${BACKEND_URL}/api/notifications/unread-count`;
   console.log(`GET ${url}`);
 
-  const res = await fetch(url, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  try {
+    const res = await makeAuthenticatedRequest(url, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
 
-  if (!res.ok) {
-    const errorText = await res.text();
-    console.error(`Failed to fetch unread count:`, errorText);
-    throw new Error(errorText || 'Failed to fetch unread count');
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error(`Failed to fetch unread count:`, errorText);
+      throw new Error(errorText || 'Failed to fetch unread count');
+    }
+
+    const data = await res.json();
+    console.log(`Unread count fetched successfully:`, data);
+    return data;
+  } catch (error: any) {
+    if (error.message === 'Network request timed out') {
+      console.error('Request timed out while fetching unread count');
+    }
+    throw error;
   }
-
-  const data = await res.json();
-  console.log(`Unread count fetched successfully:`, data);
-  return data;
 };
 
 export const markNotificationAsRead = async (token: string, notificationId: string) => {
   const url = `${BACKEND_URL}/api/notifications/${notificationId}/read`;
   console.log(`PUT ${url}`);
 
-  const res = await fetch(url, {
-    method: 'PUT',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  try {
+    const res = await makeAuthenticatedRequest(url, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
 
-  if (!res.ok) {
-    const errorText = await res.text();
-    console.error(`Failed to mark notification as read:`, errorText);
-    throw new Error(errorText || 'Failed to mark notification as read');
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error(`Failed to mark notification as read:`, errorText);
+      throw new Error(errorText || 'Failed to mark notification as read');
+    }
+
+    const data = await res.json();
+    console.log(`Notification marked as read:`, data);
+    return data;
+  } catch (error: any) {
+    if (error.message === 'Network request timed out') {
+      console.error('Request timed out while marking notification as read');
+    }
+    throw error;
   }
-
-  const data = await res.json();
-  console.log(`Notification marked as read:`, data);
-  return data;
 };
 
 export const deleteNotification = async (token: string, notificationId: string) => {
   const url = `${BACKEND_URL}/api/notifications/${notificationId}`;
   console.log(`DELETE ${url}`);
 
-  const res = await fetch(url, {
-    method: 'DELETE',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  try {
+    const res = await makeAuthenticatedRequest(url, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
 
-  if (!res.ok) {
-    const errorText = await res.text();
-    console.error(`Failed to delete notification:`, errorText);
-    throw new Error(errorText || 'Failed to delete notification');
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error(`Failed to delete notification:`, errorText);
+      throw new Error(errorText || 'Failed to delete notification');
+    }
+
+    const data = await res.json();
+    console.log(`Notification deleted:`, data);
+    return data;
+  } catch (error: any) {
+    if (error.message === 'Network request timed out') {
+      console.error('Request timed out while deleting notification');
+    }
+    throw error;
   }
-
-  const data = await res.json();
-  console.log(`Notification deleted:`, data);
-  return data;
 };
 
 export const markAllNotificationsAsRead = async (token: string) => {
   const url = `${BACKEND_URL}/api/notifications/mark-all-read`;
   console.log(`PUT ${url}`);
 
-  const res = await fetch(url, {
-    method: 'PUT',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  try {
+    const res = await makeAuthenticatedRequest(url, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
 
-  if (!res.ok) {
-    const errorText = await res.text();
-    console.error(`Failed to mark all notifications as read:`, errorText);
-    throw new Error(errorText || 'Failed to mark all notifications as read');
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error(`Failed to mark all notifications as read:`, errorText);
+      throw new Error(errorText || 'Failed to mark all notifications as read');
+    }
+
+    const data = await res.json();
+    console.log(`All notifications marked as read:`, data);
+    return data;
+  } catch (error: any) {
+    if (error.message === 'Network request timed out') {
+      console.error('Request timed out while marking all notifications as read');
+    }
+    throw error;
   }
-
-  const data = await res.json();
-  console.log(`All notifications marked as read:`, data);
-  return data;
 };
 
 // Handle student response to session reschedule (accept/reject)

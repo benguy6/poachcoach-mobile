@@ -31,13 +31,79 @@ router.get('/', verifySupabaseToken, async (req, res) => {
       .from('Sessions')
       .select('*')
       .eq('coach_id', coach.id)
-      .in('session_status', ['pubcon', 'confirmed'])
+      .in('session_status', ['pubcon', 'confirmed', 'published'])
       .order('start_time', { ascending: true })
       .limit(10);
 
     if (sessionError) {
       return res.status(500).json({ error: 'Failed to fetch sessions' });
     }
+
+    console.log('🔍 Coach Dashboard Debug:');
+    console.log('Coach ID:', coach.id);
+    console.log('Sessions fetched:', sessions?.length || 0);
+    console.log('Session statuses:', sessions?.map(s => ({ id: s.session_id, status: s.session_status, date: s.date, time: s.start_time })) || []);
+
+    // Filter out sessions that ended more than 15 minutes ago
+    const now = new Date();
+    const currentDate = now.toLocaleDateString('en-CA');
+    const currentTime = now.toTimeString().slice(0, 5);
+    
+    // For each session, fetch students
+    const filteredSessionsWithStudents = await Promise.all(sessions.filter(session => {
+      // If session is today, check if it ended more than 15 minutes ago
+      if (session.date === currentDate) {
+        const sessionEndTime = session.end_time;
+        const [currentHour, currentMin] = currentTime.split(':').map(Number);
+        const [sessionEndHour, sessionEndMin] = sessionEndTime.split(':').map(Number);
+        const currentTotalMinutes = currentHour * 60 + currentMin;
+        const sessionEndTotalMinutes = sessionEndHour * 60 + sessionEndMin;
+        const minutesAfterEnd = currentTotalMinutes - sessionEndTotalMinutes;
+        // If session ended more than 15 minutes ago, exclude it
+        return minutesAfterEnd <= 15;
+      }
+      // Keep future sessions
+      return session.date > currentDate;
+    }).map(async (session) => {
+      // Get all student enrollments for this specific session using unique_id
+      const { data: studentSessions, error: studentSessionsError } = await supabase
+        .from('Student_sessions')
+        .select('student_id, student_status')
+        .eq('session_id', session.session_id);
+
+      if (studentSessionsError || !studentSessions || studentSessions.length === 0) {
+        return { ...session, students: [] };
+      }
+
+      // Get student details from Users table
+      const studentIds = studentSessions.map(ss => ss.student_id);
+      const { data: students, error: studentsError } = await supabase
+        .from('Users')
+        .select('id, first_name, last_name, email, profile_picture, gender')
+        .in('id', studentIds);
+
+      if (studentsError || !students) {
+        return { ...session, students: [] };
+      }
+
+      // Combine student details with payment status
+      const studentsWithDetails = students.map(student => {
+        const studentSession = studentSessions.find(ss => ss.student_id === student.id);
+        return {
+          id: student.id,
+          name: `${student.first_name} ${student.last_name}`.trim(),
+          email: student.email,
+          profilePicture: student.profile_picture,
+          gender: student.gender,
+          paymentStatus: studentSession ? studentSession.student_status : 'unpaid',
+        };
+      });
+      return { ...session, students: studentsWithDetails };
+    }));
+
+    console.log('🔍 Coach Dashboard Filtered Sessions:');
+    console.log('Sessions after filtering:', filteredSessionsWithStudents?.length || 0);
+    console.log('Filtered session details:', filteredSessionsWithStudents?.map(s => ({ id: s.session_id, status: s.session_status, date: s.date, time: s.start_time, students: s.students?.length })) || []);
 
     return res.json({
       coach: {
@@ -48,7 +114,7 @@ router.get('/', verifySupabaseToken, async (req, res) => {
         bio: coach.bio,
         specialties: coach.specialties,
       },
-      confirmedSessions: sessions,
+      confirmedSessions: filteredSessionsWithStudents,
     });
   } catch (err) {
     console.error(err);
@@ -82,8 +148,33 @@ router.post('/cancel-session', verifySupabaseToken, async (req, res) => {
       }
   
       const now = new Date();
-      const startTime = new Date(session.start_time);
-      const hoursUntil = (startTime - now) / (1000 * 60 * 60);
+      const currentDate = now.toLocaleDateString('en-CA'); // YYYY-MM-DD format in local timezone
+      const currentTime = now.toTimeString().slice(0, 5); // HH:MM format in local timezone
+      
+      // Parse session date and time
+      const sessionDate = session.date;
+      const sessionStartTime = session.start_time;
+      
+      // Calculate time difference in hours
+      let hoursUntil = 0;
+      if (sessionDate > currentDate) {
+        // Future date, calculate hours until session
+        const [hour1, min1] = currentTime.split(':').map(Number);
+        const [hour2, min2] = sessionStartTime.split(':').map(Number);
+        const currentMinutes = hour1 * 60 + min1;
+        const sessionMinutes = hour2 * 60 + min2;
+        hoursUntil = (sessionMinutes - currentMinutes) / 60;
+      } else if (sessionDate === currentDate) {
+        // Same date, calculate time difference
+        const [hour1, min1] = currentTime.split(':').map(Number);
+        const [hour2, min2] = sessionStartTime.split(':').map(Number);
+        const currentMinutes = hour1 * 60 + min1;
+        const sessionMinutes = hour2 * 60 + min2;
+        hoursUntil = (sessionMinutes - currentMinutes) / 60;
+      } else {
+        // Past date
+        hoursUntil = -1;
+      }
   
       if (hoursUntil < 24) {
         return res.status(400).json({ error: 'Cannot cancel less than 24 hours before start time' });

@@ -35,7 +35,7 @@ const StudentNotificationsPage = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const { fetchUnreadCount, markAsRead: updateNotificationCount, markAllAsRead: updateAllNotificationCount, decrementUnreadCount } = useNotifications();
+  const { fetchUnreadCount, markAsRead: updateNotificationCount, markAllAsRead: updateAllNotificationCount, decrementUnreadCount, retry } = useNotifications();
 
   const [settings, setSettings] = useState({
     bookingRequests: true,
@@ -64,9 +64,18 @@ const StudentNotificationsPage = () => {
         const transformedNotifications = transformNotifications(response.notifications);
         setNotifications(transformedNotifications);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading notifications:', error);
-      Alert.alert('Error', 'Failed to load notifications');
+      
+      // Handle timeout errors specifically
+      if (error.message === 'Network request timed out') {
+        Alert.alert(
+          'Connection Timeout', 
+          'The request timed out. Please check your internet connection and try again.'
+        );
+      } else {
+        Alert.alert('Error', 'Failed to load notifications');
+      }
     } finally {
       setLoading(false);
     }
@@ -326,6 +335,11 @@ const StudentNotificationsPage = () => {
                 : "New notifications will appear here"
               }
             </Text>
+            {!loading && (
+              <TouchableOpacity style={styles.retryButton} onPress={retry}>
+                <Text style={styles.retryText}>Retry</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
       </ScrollView>
@@ -507,6 +521,19 @@ const styles = StyleSheet.create({
   emptySubtitle: {
     fontSize: 14,
     color: '#6b7280',
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: '#f97316',
+    borderRadius: 8,
+  },
+  retryText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
     textAlign: 'center',
   },
 });
