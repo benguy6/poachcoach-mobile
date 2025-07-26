@@ -48,11 +48,6 @@ const StudentAutomaticClassStartedModal: React.FC<StudentAutomaticClassStartedMo
   
   const [attendanceStatus, setAttendanceStatus] = useState<'present' | 'absent' | 'late' | 'pending'>('pending');
   const [lateMinutes, setLateMinutes] = useState(0);
-  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
-  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
-  const [coachRating, setCoachRating] = useState(0);
-  const [classRating, setClassRating] = useState(0);
-  const [feedbackText, setFeedbackText] = useState('');
 
   // Check attendance status periodically
   useEffect(() => {
@@ -70,7 +65,7 @@ const StudentAutomaticClassStartedModal: React.FC<StudentAutomaticClassStartedMo
               'Authorization': `Bearer ${token}`,
             },
             body: JSON.stringify({
-              sessionId: session.unique_id || session.id,
+              sessionId: session.session_id || session.unique_id || session.id,
               studentId: currentStudentId,
             }),
           });
@@ -96,57 +91,15 @@ const StudentAutomaticClassStartedModal: React.FC<StudentAutomaticClassStartedMo
     }
   }, [visible, session, currentStudentId]);
 
-  const handleGiveFeedback = () => {
-    setShowFeedbackModal(true);
-  };
 
-  const handleFeedbackSubmit = async () => {
-    if (coachRating === 0 || classRating === 0) {
-      Alert.alert('Required', 'Please provide ratings for both coach and class.');
-      return;
-    }
-
-    setIsSubmittingFeedback(true);
-    try {
-      const { data: { session: authSession } } = await supabase.auth.getSession();
-      const token = authSession?.access_token;
-      if (!token) throw new Error('No token available');
-
-      const response = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL || 'http://172.20.10.3:3000'}/api/student/submit-feedback`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          sessionId: session.unique_id || session.id,
-          coachRating,
-          classRating,
-          feedback: feedbackText,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to submit feedback');
-      }
-
-      Alert.alert('Success', 'Feedback submitted successfully!');
-      setShowFeedbackModal(false);
-    } catch (error) {
-      console.error('Error submitting feedback:', error);
-      Alert.alert('Error', 'Failed to submit feedback. Please try again.');
-    } finally {
-      setIsSubmittingFeedback(false);
-    }
-  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'present': return '#10b981';
       case 'absent': return '#ef4444';
-      case 'late': return '#f59e0b';
-      case 'pending': return '#6b7280';
-      default: return '#6b7280';
+      case 'late': return '#fef3c7'; // Light orange background
+      case 'pending': return '#fef3c7'; // Light orange background
+      default: return '#fef3c7'; // Light orange background
     }
   };
 
@@ -155,8 +108,8 @@ const StudentAutomaticClassStartedModal: React.FC<StudentAutomaticClassStartedMo
       case 'present': return 'checkmark-circle';
       case 'absent': return 'close-circle';
       case 'late': return 'time';
-      case 'pending': return 'help-circle';
-      default: return 'help-circle';
+      case 'pending': return 'time';
+      default: return 'time';
     }
   };
 
@@ -165,34 +118,12 @@ const StudentAutomaticClassStartedModal: React.FC<StudentAutomaticClassStartedMo
       case 'present': return 'Present';
       case 'absent': return 'Absent';
       case 'late': return `Late (+${lateMinutes}m)`;
-      case 'pending': return 'Pending';
-      default: return 'Unknown';
+      case 'pending': return 'Late';
+      default: return 'Late';
     }
   };
 
-  const renderStarRating = (rating: number, onRatingChange: (rating: number) => void, title: string) => {
-    return (
-      <View style={styles.ratingContainer}>
-        <Text style={styles.ratingTitle}>{title}</Text>
-        <View style={styles.starsContainer}>
-          {[1, 2, 3, 4, 5].map((star) => (
-            <TouchableOpacity
-              key={star}
-              onPress={() => onRatingChange(star)}
-              style={styles.starButton}
-            >
-              <Ionicons
-                name={star <= rating ? 'star' : 'star-outline'}
-                size={24}
-                color={star <= rating ? '#fbbf24' : '#d1d5db'}
-              />
-            </TouchableOpacity>
-          ))}
-        </View>
-        <Text style={styles.ratingText}>{rating}/5</Text>
-      </View>
-    );
-  };
+
 
   if (!session) return null;
 
@@ -215,12 +146,25 @@ const StudentAutomaticClassStartedModal: React.FC<StudentAutomaticClassStartedMo
 
           {/* Session Info */}
           <View style={styles.sessionInfo}>
-            <Text style={styles.sessionTitle}>{session.sport}</Text>
+            <Text style={styles.sessionTitle}>{session.session_name || session.sport}</Text>
             <Text style={styles.sessionDetails}>
-              {session.date} • {session.start_time} - {session.end_time}
+              {session.date} • {(() => {
+                let startTime = session.start_time;
+                let endTime = session.end_time;
+                
+                // Handle datetime strings (extract time part for display)
+                if (startTime && startTime.includes('T')) {
+                  startTime = startTime.split('T')[1].split(':').slice(0, 2).join(':');
+                }
+                if (endTime && endTime.includes('T')) {
+                  endTime = endTime.split('T')[1].split(':').slice(0, 2).join(':');
+                }
+                
+                return `${startTime} - ${endTime}`;
+              })()}
             </Text>
             <Text style={styles.sessionLocation}>
-              📍 {session.address || session.location_name || 'N/A'}
+              📍 {session.address || session.location_name || session.location || 'N/A'}
             </Text>
           </View>
 
@@ -229,14 +173,21 @@ const StudentAutomaticClassStartedModal: React.FC<StudentAutomaticClassStartedMo
             <Text style={styles.sectionTitle}>Your Attendance Status</Text>
             <View style={[
               styles.statusBadge,
-              { backgroundColor: getStatusColor(attendanceStatus) }
+              { 
+                backgroundColor: getStatusColor(attendanceStatus),
+                borderColor: (attendanceStatus === 'pending' || attendanceStatus === 'late') ? '#ea580c' : 'transparent',
+                borderWidth: (attendanceStatus === 'pending' || attendanceStatus === 'late') ? 2 : 0
+              }
             ]}>
               <Ionicons 
                 name={getStatusIcon(attendanceStatus) as any} 
                 size={20} 
-                color="white" 
+                color={(attendanceStatus === 'pending' || attendanceStatus === 'late') ? '#ea580c' : 'white'} 
               />
-              <Text style={styles.statusText}>{getStatusText(attendanceStatus)}</Text>
+              <Text style={[
+                styles.statusText,
+                { color: (attendanceStatus === 'pending' || attendanceStatus === 'late') ? '#ea580c' : 'white' }
+              ]}>{getStatusText(attendanceStatus)}</Text>
             </View>
             {attendanceStatus === 'pending' && (
               <Text style={styles.statusNote}>
@@ -283,73 +234,11 @@ const StudentAutomaticClassStartedModal: React.FC<StudentAutomaticClassStartedMo
             </ScrollView>
           </View>
 
-          {/* Action Buttons */}
-          <View style={styles.actionButtons}>
-            <TouchableOpacity
-              style={styles.feedbackBtn}
-              onPress={handleGiveFeedback}
-            >
-              <Ionicons name="star" size={20} color="white" />
-              <Text style={styles.feedbackBtnText}>Give Feedback</Text>
-            </TouchableOpacity>
-          </View>
+
         </View>
       </View>
 
-      {/* Feedback Modal */}
-      <Modal
-        visible={showFeedbackModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowFeedbackModal(false)}
-      >
-        <View style={styles.overlay}>
-          <View style={styles.feedbackContainer}>
-            <View style={styles.feedbackHeader}>
-              <Text style={styles.feedbackTitle}>Class Feedback</Text>
-              <TouchableOpacity onPress={() => setShowFeedbackModal(false)}>
-                <Ionicons name="close" size={24} color="#6b7280" />
-              </TouchableOpacity>
-            </View>
 
-            <ScrollView style={styles.feedbackContent}>
-              {renderStarRating(coachRating, setCoachRating, 'Rate Your Coach')}
-              {renderStarRating(classRating, setClassRating, 'Rate This Class')}
-              
-              <View style={styles.feedbackInputContainer}>
-                <Text style={styles.feedbackLabel}>Additional Comments (Optional)</Text>
-                <ScrollView style={styles.feedbackTextInput}>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="Share your thoughts about the class..."
-                    value={feedbackText}
-                    onChangeText={setFeedbackText}
-                    multiline
-                    numberOfLines={4}
-                  />
-                </ScrollView>
-              </View>
-            </ScrollView>
-
-            <View style={styles.feedbackActions}>
-              <TouchableOpacity
-                style={[styles.submitFeedbackBtn, isSubmittingFeedback && styles.disabledButton]}
-                onPress={handleFeedbackSubmit}
-                disabled={isSubmittingFeedback}
-              >
-                {isSubmittingFeedback ? (
-                  <ActivityIndicator color="white" size="small" />
-                ) : (
-                  <>
-                    <Ionicons name="send" size={20} color="white" />
-                    <Text style={styles.submitFeedbackText}>Submit Feedback</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </Modal>
   );
 };
@@ -490,105 +379,7 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontWeight: '600',
   },
-  actionButtons: {
-    marginTop: 20,
-  },
-  feedbackBtn: {
-    backgroundColor: '#3b82f6',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 15,
-    borderRadius: 12,
-    gap: 8,
-  },
-  feedbackBtnText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  // Feedback Modal Styles
-  feedbackContainer: {
-    backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 20,
-    width: '90%',
-    maxHeight: '80%',
-  },
-  feedbackHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  feedbackTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1f2937',
-  },
-  feedbackContent: {
-    flex: 1,
-  },
-  ratingContainer: {
-    marginBottom: 20,
-  },
-  ratingTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 10,
-  },
-  starsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  starButton: {
-    padding: 4,
-  },
-  ratingText: {
-    textAlign: 'center',
-    fontSize: 14,
-    color: '#6b7280',
-  },
-  feedbackInputContainer: {
-    marginTop: 20,
-  },
-  feedbackLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 10,
-  },
-  feedbackTextInput: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    padding: 12,
-    minHeight: 100,
-  },
-  textInput: {
-    fontSize: 14,
-    color: '#1f2937',
-    textAlignVertical: 'top',
-  },
-  feedbackActions: {
-    marginTop: 20,
-  },
-  submitFeedbackBtn: {
-    backgroundColor: '#10b981',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 15,
-    borderRadius: 12,
-    gap: 8,
-  },
-  submitFeedbackText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+
   disabledButton: {
     opacity: 0.6,
   },

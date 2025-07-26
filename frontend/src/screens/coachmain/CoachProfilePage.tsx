@@ -26,6 +26,7 @@ import {
   Pencil,
   X,
 } from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import DropDownPicker from "react-native-dropdown-picker";
 import Slider from "@react-native-community/slider";
@@ -225,6 +226,9 @@ const CoachProfilePage: React.FC<CoachProfilePageProps> = ({ onProfilePicChange 
       <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 100 }}>
         <View style={styles.header}>
           <View style={styles.headerTop}>
+            <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+              <Ionicons name="arrow-back" size={24} color="white" />
+            </TouchableOpacity>
             <Text style={styles.title}>Coach Profile</Text>
             <TouchableOpacity style={styles.iconButton} onPress={handleEditProfile}>
               <Pencil size={20} color="white" />
@@ -288,7 +292,6 @@ const CoachProfilePage: React.FC<CoachProfilePageProps> = ({ onProfilePicChange 
       <Modal
         visible={showEditModal}
         animationType="slide"
-        presentationStyle="pageSheet"
         onRequestClose={() => setShowEditModal(false)}
       >
         <KeyboardAvoidingView 
@@ -298,24 +301,25 @@ const CoachProfilePage: React.FC<CoachProfilePageProps> = ({ onProfilePicChange 
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Edit Profile</Text>
             <TouchableOpacity onPress={() => setShowEditModal(false)}>
-              <X size={24} color="#fb923c" />
+              <X size={24} color="#ffffff" />
             </TouchableOpacity>
           </View>
           
-          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.modalContent}>
             <View style={styles.formSection}>
               <Text style={styles.sectionTitle}>Personal Information</Text>
               
+              <Text style={styles.label}>Full Name</Text>
               <View style={styles.nameRow}>
                 <TextInput
-                  style={[styles.input, { flex: 1, marginRight: 8 }]}
+                  style={[styles.input, { flex: 1, marginRight: 12 }]}
                   placeholder="First Name"
                   placeholderTextColor="#666"
                   value={editForm.first_name}
                   onChangeText={(text) => setEditForm(prev => ({ ...prev, first_name: text }))}
                 />
                 <TextInput
-                  style={[styles.input, { flex: 1, marginLeft: 8 }]}
+                  style={[styles.input, { flex: 1, marginLeft: 12 }]}
                   placeholder="Last Name"
                   placeholderTextColor="#666"
                   value={editForm.last_name}
@@ -323,66 +327,80 @@ const CoachProfilePage: React.FC<CoachProfilePageProps> = ({ onProfilePicChange 
                 />
               </View>
 
+              <View style={styles.fieldSpacer} />
+
               <Text style={styles.label}>Gender</Text>
-                                            <DropDownPicker
-                 open={openGender}
-                 value={editForm.gender}
-                 items={genderItems}
-                 setOpen={setOpenGender}
-                 setValue={setEditForm}
-                 setItems={setGenderItems}
-                 style={styles.dropdown}
-                 dropDownContainerStyle={styles.dropdownContainer}
-                 zIndex={3000}
-                 zIndexInverse={1000}
-               />
+              <DropDownPicker
+                open={openGender}
+                value={editForm.gender}
+                items={genderItems}
+                setOpen={setOpenGender}
+                setValue={setEditForm}
+                setItems={setGenderItems}
+                style={styles.dropdown}
+                dropDownContainerStyle={styles.dropdownContainer}
+                textStyle={styles.dropdownText}
+                zIndex={3000}
+                zIndexInverse={1000}
+              />
 
-               <Text style={styles.label}>Age: {editForm.age}</Text>
-               <Slider
-                 style={{ width: "100%", height: 40 }}
-                 minimumValue={1}
-                 maximumValue={100}
-                 step={1}
-                 minimumTrackTintColor="#fb923c"
-                 maximumTrackTintColor="#666"
-                 thumbTintColor="#fb923c"
-                 value={Number(editForm.age)}
-                 onValueChange={(value) => setEditForm(prev => ({ ...prev, age: String(value) }))}
-               />
+              <View style={styles.fieldSpacer} />
 
-               <Text style={styles.label}>Sport</Text>
-               <DropDownPicker
-                 open={openSport}
-                 value={editForm.sport}
-                 items={sportItems}
-                 setOpen={setOpenSport}
-                 setValue={setEditForm}
-                 setItems={setSportItems}
-                 style={styles.dropdown}
-                 dropDownContainerStyle={styles.dropdownContainer}
-                 zIndex={2000}
-                 zIndexInverse={2000}
-               />
+              <Text style={styles.label}>Age: {editForm.age}</Text>
+              <Slider
+                style={{ width: "100%", height: 40, marginVertical: 8 }}
+                minimumValue={1}
+                maximumValue={100}
+                step={1}
+                minimumTrackTintColor="#fb923c"
+                maximumTrackTintColor="#666"
+                thumbTintColor="#fb923c"
+                value={Number(editForm.age)}
+                onValueChange={(value) => setEditForm(prev => ({ ...prev, age: String(value) }))}
+              />
 
+              <View style={styles.fieldSpacer} />
+
+              <Text style={styles.label}>Sport</Text>
+              <DropDownPicker
+                open={openSport}
+                value={editForm.sport}
+                items={sportItems}
+                setOpen={setOpenSport}
+                setValue={setEditForm}
+                setItems={setSportItems}
+                style={styles.dropdown}
+                dropDownContainerStyle={styles.dropdownContainer}
+                textStyle={styles.dropdownText}
+                zIndex={2000}
+                zIndexInverse={2000}
+              />
+
+              <View style={styles.fieldSpacer} />
+
+              <Text style={styles.label}>Phone Number</Text>
               <TextInput
-                style={styles.input}
-                placeholder="Phone Number"
+                style={[styles.input, styles.fullWidthInput]}
+                placeholder="Enter your phone number"
                 placeholderTextColor="#666"
                 value={editForm.number}
                 onChangeText={(text) => setEditForm(prev => ({ ...prev, number: text }))}
                 keyboardType="phone-pad"
               />
 
+              <View style={styles.fieldSpacer} />
+
+              <Text style={styles.label}>Postal Code</Text>
               <TextInput
-                style={styles.input}
-                placeholder="Postal Code"
+                style={[styles.input, styles.fullWidthInput]}
+                placeholder="Enter your postal code"
                 placeholderTextColor="#666"
                 value={editForm.postal_code}
                 onChangeText={(text) => setEditForm(prev => ({ ...prev, postal_code: text }))}
                 keyboardType="numeric"
               />
             </View>
-          </ScrollView>
+          </View>
 
           <View style={styles.modalFooter}>
             <TouchableOpacity 
@@ -471,10 +489,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  backButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#fb923c',
+    textAlign: 'center',
+    flex: 1,
   },
   profileSection: {
     flexDirection: 'row',
@@ -606,87 +631,121 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 24,
     borderBottomWidth: 1,
     borderBottomColor: '#27272a',
+    backgroundColor: '#fb923c',
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 22,
+    fontWeight: '700',
     color: 'white',
   },
   modalContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 20,
   },
   formSection: {
-    marginBottom: 20,
+    backgroundColor: '#27272a',
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 24,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: '700',
     color: '#fb923c',
-    marginBottom: 12,
+    marginBottom: 20,
   },
   nameRow: {
     flexDirection: 'row',
-    marginBottom: 12,
+    marginBottom: 20,
   },
   input: {
     flex: 1,
-    backgroundColor: '#27272a',
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
+    backgroundColor: '#3f3f46',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     color: 'white',
     fontSize: 16,
     borderWidth: 1,
-    borderColor: '#3f3f46',
+    borderColor: '#52525b',
   },
   label: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#d1d5db',
     marginBottom: 8,
+    fontWeight: '600',
   },
   dropdown: {
-    backgroundColor: '#27272a',
-    borderRadius: 10,
+    backgroundColor: '#3f3f46',
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#3f3f46',
-    marginBottom: 12,
+    borderColor: '#52525b',
+    marginBottom: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
   dropdownContainer: {
-    backgroundColor: '#27272a',
+    backgroundColor: '#3f3f46',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#52525b',
+  },
+  dropdownText: {
+    color: 'white',
+    fontSize: 16,
+  },
+  fullWidthInput: {
+    width: '100%',
+    flex: undefined,
+  },
+  fieldSpacer: {
+    height: 16,
   },
   modalFooter: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingVertical: 24,
     borderTopWidth: 1,
     borderTopColor: '#27272a',
   },
   cancelButton: {
     backgroundColor: '#666',
-    paddingVertical: 12,
-    paddingHorizontal: 30,
-    borderRadius: 28,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    flex: 0.48,
+    alignItems: 'center',
   },
   cancelButtonText: {
     color: 'white',
-    fontWeight: 'bold',
+    fontWeight: '700',
     fontSize: 16,
   },
   saveButton: {
     backgroundColor: '#fb923c',
-    paddingVertical: 12,
-    paddingHorizontal: 30,
-    borderRadius: 28,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    flex: 0.48,
+    alignItems: 'center',
   },
   saveButtonText: {
     color: 'white',
-    fontWeight: 'bold',
+    fontWeight: '700',
     fontSize: 16,
   },
 });

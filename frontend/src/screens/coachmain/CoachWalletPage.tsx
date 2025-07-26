@@ -455,97 +455,118 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
+    paddingHorizontal: 20,
   },
   modalContent: {
     backgroundColor: '#1f2937',
-    borderRadius: 16,
-    width: '90%',
-    maxWidth: 400,
+    borderRadius: 20,
+    width: '100%',
+    maxWidth: 350,
     borderWidth: 1,
     borderColor: '#f97316',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 10,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#374151'
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#f97316'
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#ffffff'
   },
   closeButton: {
-    padding: 4
+    padding: 8
   },
   modalBody: {
-    padding: 20
+    paddingHorizontal: 24,
+    paddingVertical: 20
   },
   modalLabel: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 16,
+    fontWeight: '600',
     color: '#f97316',
-    marginBottom: 8
+    marginBottom: 12
   },
   modalBalanceContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 20,
+    gap: 12,
+    marginBottom: 24,
+    paddingVertical: 8,
   },
   modalBalance: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#f97316',
   },
   amountInput: {
     borderWidth: 1,
     borderColor: '#f97316',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    marginBottom: 16,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 18,
+    marginBottom: 20,
     backgroundColor: '#374151',
-    color: '#ffffff'
+    color: '#ffffff',
+    textAlign: 'center',
   },
   phoneNumber: {
-    fontSize: 16,
+    fontSize: 18,
     color: '#f97316',
-    marginBottom: 16,
-    padding: 12,
+    marginBottom: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     backgroundColor: '#374151',
-    borderRadius: 8
+    borderRadius: 12,
+    textAlign: 'center',
+    fontWeight: '600',
   },
   infoBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     backgroundColor: '#1f2937',
-    padding: 12,
-    borderRadius: 8,
-    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
+    gap: 12,
     borderWidth: 1,
     borderColor: '#f97316',
+    marginBottom: 8,
   },
   infoText: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 15,
     color: '#f97316',
-    lineHeight: 20
+    lineHeight: 22,
+    fontWeight: '500',
   },
   modalFooter: {
     flexDirection: 'row',
-    gap: 12,
-    padding: 20,
+    gap: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 20,
     borderTopWidth: 1,
     borderTopColor: '#374151'
   },
   cancelButton: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingVertical: 16,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#f97316',
     alignItems: 'center',
@@ -553,13 +574,14 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     color: '#f97316',
-    fontWeight: '500'
+    fontWeight: '600',
+    fontSize: 16
   },
   confirmButton: {
     flex: 1,
     backgroundColor: '#f97316',
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingVertical: 16,
+    borderRadius: 12,
     alignItems: 'center'
   },
   confirmButtonDisabled: {
@@ -567,7 +589,8 @@ const styles = StyleSheet.create({
   },
   confirmButtonText: {
     color: '#fff',
-    fontWeight: '600'
+    fontWeight: '700',
+    fontSize: 16
   },
   modalConversionContainer: {
     marginTop: 12,

@@ -8,20 +8,23 @@ import {
   StyleSheet,
   StatusBar,
   SafeAreaView,
+  Alert,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import BottomNavigation from '../../components/BottomNavigation';
 import { studentTabs } from '../../constants/studentTabs';
 import { supabase } from '../../services/supabase';
-import { getStudentDashboard } from '../../services/api';
+import { getStudentDashboard, cancelSession } from '../../services/api';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRecentMessages } from '../../hooks/useRecentMessages';
 import { useNotificationContext } from '../../context/NotificationContext';
 import ChatModal from '../../components/ChatModal';
 import LoadingOverlay from '../../components/LoadingOverlay';
-import ActiveClassBanner from '../../components/ActiveClassBanner';
 import ClassStartedModal from '../../components/ClassStartedModal';
 import StudentAutomaticClassStartedModal from '../../components/StudentAutomaticClassStartedModal';
+import StudentActiveClassBanner from '../../components/StudentActiveClassBanner';
+import StudentClassFeedbackModal from '../../components/StudentClassFeedbackModal';
 
 interface Chat {
   id: number;
@@ -63,8 +66,23 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
   const [studentAutomaticClassStudents, setStudentAutomaticClassStudents] = useState<any[]>([]);
   const [currentStudentId, setCurrentStudentId] = useState<string>('');
   
+  // Session details modal state
+  const [showSessionDetailsModal, setShowSessionDetailsModal] = useState(false);
+  const [selectedSessionDetails, setSelectedSessionDetails] = useState<any>(null);
+  
+  // Student attendance status state
+  const [studentAttendanceStatus, setStudentAttendanceStatus] = useState<'present' | 'absent' | 'late' | 'pending'>('pending');
+  
+  // Class feedback modal state
+  const [showClassFeedbackModal, setShowClassFeedbackModal] = useState(false);
+  const [feedbackSession, setFeedbackSession] = useState<any>(null);
+  const [totalClassesAttended, setTotalClassesAttended] = useState(0);
+  
+  // State to trigger message refresh
+  const [messageRefreshKey, setMessageRefreshKey] = useState(0);
+  
   // Use the real recent messages hook
-  const { messages: recentMessages, loading: messagesLoading } = useRecentMessages(2);
+  const { messages: recentMessages, loading: messagesLoading } = useRecentMessages(2, messageRefreshKey);
   
   // Use the notifications context
   const { unreadCount: notifications, fetchUnreadCount } = useNotificationContext();
@@ -81,10 +99,12 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
 
           console.log('Dashboard Response:', dashboard); 
 
+          console.log('🔍 Student - Dashboard response:', dashboard);
           setFirstName(dashboard.user?.name || 'Student'); 
           setSessions(dashboard.sessions || []);
           setProfilePicture(dashboard.user?.profilePicture|| undefined);
-          setCurrentStudentId(dashboard.user?.id || ''); 
+          setCurrentStudentId(dashboard.user?.id || '');
+          console.log('🔍 Student - Sessions set:', dashboard.sessions?.length || 0); 
         } catch (error) {
           console.error('Failed to fetch dashboard info', error);
         } finally {
@@ -93,40 +113,98 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
       };
 
       fetchDashboard();
+      
+      // Refresh messages when page is focused
+      setMessageRefreshKey(prev => prev + 1);
     }, [])
   );
 
   // Calculate countdown for next class
-  const calculateCountdown = () => {
+  const calculateCountdown = async () => {
     const nextClass = getNextUpcomingClass();
     if (!nextClass) {
+      console.log('🔍 Student - No next class for countdown');
       setCountdown('');
       return;
     }
 
     const now = new Date();
+    const currentDate = now.toLocaleDateString('en-CA');
+    const currentTime = now.toTimeString().slice(0, 5);
     const sessionDate = nextClass.date || nextClass.session_date;
-    const sessionTime = nextClass.start_time;
+    let sessionTime = nextClass.start_time;
     
-    // Create session datetime
-    const sessionDateTime = new Date(`${sessionDate}T${sessionTime}`);
-    const timeDiff = sessionDateTime.getTime() - now.getTime();
+    // Handle datetime strings (extract time part)
+    if (sessionTime && sessionTime.includes('T')) {
+      sessionTime = sessionTime.split('T')[1].split(':').slice(0, 2).join(':');
+    }
     
-    if (timeDiff <= 0) {
+    console.log('🔍 Student - Countdown calculation:');
+    console.log('Next class:', nextClass);
+    console.log('Session date:', sessionDate);
+    console.log('Session time:', sessionTime);
+    console.log('Current date:', currentDate);
+    console.log('Current time:', currentTime);
+    
+    // Validate date and time
+    if (!sessionDate || !sessionTime) {
+      console.log('🔍 Student - Missing date or time, clearing countdown');
       setCountdown('');
       return;
     }
     
-    const hours = Math.floor(timeDiff / (1000 * 60 * 60));
-    const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
-    const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000);
+    // Check if session is today
+    if (sessionDate !== currentDate) {
+      console.log('🔍 Student - Session is not today, clearing countdown');
+      setCountdown('');
+      return;
+    }
     
-    const countdownText = `+${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-    setCountdown(countdownText);
+    // Calculate time difference in seconds (like coach homepage)
+    const [currentHour, currentMin] = currentTime.split(':').map(Number);
+    const [sessionHour, sessionMin] = sessionTime.split(':').map(Number);
+    
+    const currentTotalSeconds = (currentHour * 60 + currentMin) * 60 + now.getSeconds();
+    const sessionTotalSeconds = (sessionHour * 60 + sessionMin) * 60;
+    const remainingSeconds = sessionTotalSeconds - currentTotalSeconds;
+    
+    console.log('Current total seconds:', currentTotalSeconds);
+    console.log('Session total seconds:', sessionTotalSeconds);
+    console.log('Remaining seconds:', remainingSeconds);
+    
+    if (remainingSeconds > 0) {
+      const hours = Math.floor(remainingSeconds / 3600);
+      const minutes = Math.floor((remainingSeconds % 3600) / 60);
+      const seconds = remainingSeconds % 60;
+      
+      let countdownText = '';
+      if (hours > 0) {
+        countdownText = `+${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+      } else if (minutes > 0) {
+        countdownText = `+${minutes}:${seconds.toString().padStart(2, '0')}`;
+      } else {
+        countdownText = `+${seconds}s`;
+      }
+      
+      console.log('🔍 Student - Countdown text:', countdownText);
+      setCountdown(countdownText);
+    } else {
+      // Time to start the class - just set active class and check attendance
+      console.log('🔍 Student - Countdown reached zero - class has started!');
+      console.log('Next class:', nextClass);
+      
+      // Set active class but don't show modal automatically
+      setActiveClass(nextClass);
+      
+      // Check attendance status for the new active class
+      await checkStudentAttendanceStatus(nextClass.session_id || nextClass.id);
+      
+      setCountdown('Starting...');
+    }
   };
 
   // Check for automatic class triggering
-  const checkForAutomaticClassStart = () => {
+  const checkForAutomaticClassStart = async () => {
     const nextClass = getNextUpcomingClass();
     if (!nextClass) {
       console.log('🔍 Student - No next class found for automatic start check');
@@ -137,7 +215,18 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
     const currentDate = now.toLocaleDateString('en-CA');
     const currentTime = now.toTimeString().slice(0, 5);
     const sessionDate = nextClass.date || nextClass.session_date;
-    const sessionTime = nextClass.start_time;
+    let sessionTime = nextClass.start_time;
+
+    // Handle datetime strings (extract time part)
+    if (sessionTime && sessionTime.includes('T')) {
+      sessionTime = sessionTime.split('T')[1].split(':').slice(0, 2).join(':');
+    }
+
+    // Validate date and time
+    if (!sessionDate || !sessionTime) {
+      console.log('🔍 Student - Missing date or time for automatic start check');
+      return;
+    }
 
     console.log('🔍 Student - Automatic class start check:');
     console.log('Current date:', currentDate);
@@ -151,13 +240,17 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
     if (sessionDate === currentDate && isTimeGreaterOrEqual(currentTime, sessionTime)) {
       console.log('🔍 Student - Automatic class start triggered!');
       console.log('Session:', nextClass);
+      console.log('Setting active class...');
       
-      // Set the session and students for the modal
-      setAutomaticClassSession(nextClass);
-      setAutomaticClassStudents(nextClass.students || []);
-      setShowAutomaticClassModal(true);
+      // Set the session but don't show modal automatically
+      setActiveClass(nextClass);
+      
+      // Check attendance status for the new active class
+      await checkStudentAttendanceStatus(nextClass.session_id || nextClass.id);
     } else {
       console.log('🔍 Student - Not time to start class yet');
+      console.log('Date match:', sessionDate === currentDate);
+      console.log('Time check:', isTimeGreaterOrEqual(currentTime, sessionTime));
     }
   };
 
@@ -186,8 +279,16 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
       // Find currently running class from sessions
       const currentlyRunningClass = sessions.find(session => {
         const sessionDate = session.date || session.session_date;
-        const sessionStartTime = session.start_time;
-        const sessionEndTime = session.end_time;
+        let sessionStartTime = session.start_time;
+        let sessionEndTime = session.end_time;
+        
+        // Handle datetime strings (extract time part)
+        if (sessionStartTime && sessionStartTime.includes('T')) {
+          sessionStartTime = sessionStartTime.split('T')[1].split(':').slice(0, 2).join(':');
+        }
+        if (sessionEndTime && sessionEndTime.includes('T')) {
+          sessionEndTime = sessionEndTime.split('T')[1].split(':').slice(0, 2).join(':');
+        }
         
         // Check if session is today and currently running
         if (sessionDate === currentDate) {
@@ -201,35 +302,44 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
       console.log('Currently running class found:', currentlyRunningClass);
       setActiveClass(currentlyRunningClass || null);
       
-      // If there's an active class, fetch students and show student modal
+      // If there's an active class, check attendance status
       if (currentlyRunningClass) {
-        try {
-          const { data: { session: authSession } } = await supabase.auth.getSession();
-          const token = authSession?.access_token;
-          if (!token) return;
-
-          const response = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL || 'http://172.20.10.3:3000'}/api/student/active-class-students`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              sessionId: currentlyRunningClass.unique_id || currentlyRunningClass.id,
-            }),
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            setStudentAutomaticClassStudents(data.students || []);
-            setShowStudentAutomaticModal(true);
-          }
-        } catch (error) {
-          console.error('Error fetching active class students:', error);
-        }
+        await checkStudentAttendanceStatus(currentlyRunningClass.session_id || currentlyRunningClass.id);
       }
     } catch (error) {
       console.error('Error checking active class:', error);
+    }
+  };
+
+  const checkStudentAttendanceStatus = async (sessionId: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) return;
+
+      const response = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL || 'http://172.20.10.3:3000'}/api/student/attendance-status`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          sessionId: sessionId,
+          studentId: currentStudentId,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Student attendance status:', data);
+        setStudentAttendanceStatus(data.status || 'pending');
+      } else {
+        console.log('Failed to get attendance status, defaulting to pending');
+        setStudentAttendanceStatus('pending');
+      }
+    } catch (error) {
+      console.error('Error checking attendance status:', error);
+      setStudentAttendanceStatus('pending');
     }
   };
 
@@ -250,8 +360,16 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
     // Filter sessions that are in the future or ended less than 15 minutes ago
     const upcomingSessions = sessions.filter(session => {
       const sessionDate = session.date || session.session_date;
-      const sessionStartTime = session.start_time;
-      const sessionEndTime = session.end_time;
+      let sessionStartTime = session.start_time;
+      let sessionEndTime = session.end_time;
+      
+      // Handle datetime strings (extract time part)
+      if (sessionStartTime && sessionStartTime.includes('T')) {
+        sessionStartTime = sessionStartTime.split('T')[1].split(':').slice(0, 2).join(':');
+      }
+      if (sessionEndTime && sessionEndTime.includes('T')) {
+        sessionEndTime = sessionEndTime.split('T')[1].split(':').slice(0, 2).join(':');
+      }
       
       console.log('Session:', {
         date: sessionDate,
@@ -264,26 +382,21 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
       // If session is today, check if it's in the future or ended less than 15 minutes ago
       if (sessionDate === currentDate) {
         const isFuture = !isTimeGreaterOrEqual(currentTime, sessionStartTime);
+        const isCurrentlyRunning = isTimeGreaterOrEqual(currentTime, sessionStartTime) && 
+          !isTimeGreaterOrEqual(currentTime, sessionEndTime);
         
         // Check if session ended more than 15 minutes ago
         const isEndedMoreThan15MinAgo = isTimeGreaterOrEqual(currentTime, sessionEndTime) && 
           isTimeGreaterOrEqual(currentTime, addMinutesToTime(sessionEndTime, 15));
         
-        console.log('Today session, is future:', isFuture, 'ended more than 15 min ago:', isEndedMoreThan15MinAgo);
-        return isFuture && !isEndedMoreThan15MinAgo;
+        console.log('Today session, is future:', isFuture, 'is currently running:', isCurrentlyRunning, 'ended more than 15 min ago:', isEndedMoreThan15MinAgo);
+        return isFuture && !isCurrentlyRunning && !isEndedMoreThan15MinAgo;
       }
       
       // If session is in the future, include it
       const isFutureDate = sessionDate > currentDate;
       console.log('Future date session:', isFutureDate);
       console.log('Session date:', sessionDate, 'Current date:', currentDate, 'Comparison:', sessionDate > currentDate);
-      
-      // Temporary: Include all future sessions regardless of date format
-      if (sessionDate && sessionDate !== currentDate) {
-        console.log('Including session with date:', sessionDate);
-        return true;
-      }
-      
       return isFutureDate;
     });
 
@@ -335,9 +448,9 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
   useEffect(() => {
     if (!sessions || sessions.length === 0) return;
 
-    const interval = setInterval(() => {
-      checkForAutomaticClassStart();
-      checkActiveClass();
+    const interval = setInterval(async () => {
+      await checkForAutomaticClassStart();
+      await checkActiveClass();
     }, 10000); // Check every 10 seconds
 
     return () => clearInterval(interval);
@@ -347,12 +460,25 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
   useEffect(() => {
     calculateCountdown();
     
-    const countdownInterval = setInterval(() => {
-      calculateCountdown();
+    const countdownInterval = setInterval(async () => {
+      await calculateCountdown();
     }, 1000); // Update every second
     
     return () => clearInterval(countdownInterval);
   }, [sessions]);
+
+  // Check for class completion effect
+  useEffect(() => {
+    if (activeClass) {
+      checkActiveClass();
+      
+      const completionInterval = setInterval(async () => {
+        await checkActiveClass();
+      }, 30000); // Check every 30 seconds
+      
+      return () => clearInterval(completionInterval);
+    }
+  }, [activeClass]);
 
   // Remove static chats data - now using real data from useRecentMessages hook
 
@@ -377,20 +503,152 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
     });
   };
 
-  const handleBannerPress = () => {
+  const handleBannerPress = async () => {
     if (activeClass) {
-      // For students, show the class started modal when banner is pressed
-      setClassStartedInfo({
-        sport: activeClass.session_name || activeClass.class_type,
-        coachName: activeClass.coach_name || 'Coach',
-        startTime: activeClass.start_time,
-        endTime: activeClass.end_time,
-        location: activeClass.location || activeClass.address,
-        date: activeClass.date || activeClass.session_date
+      try {
+        // Fetch students data for the active class
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (!token) return;
+
+        const response = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL || 'http://172.20.10.3:3000'}/api/student/active-class-students`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            sessionId: activeClass.session_id || activeClass.id,
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setStudentAutomaticClassStudents(data.students || []);
+        } else {
+          setStudentAutomaticClassStudents(activeClass.students || []);
+        }
+        
+        // Show the student automatic modal
+        setShowStudentAutomaticModal(true);
+      } catch (error) {
+        console.error('Error fetching active class students:', error);
+        setStudentAutomaticClassStudents(activeClass.students || []);
+        setShowStudentAutomaticModal(true);
+      }
+    }
+  };
+
+  const handleViewDetails = (session: any) => {
+    // For students, show session details modal
+    setSelectedSessionDetails({
+      id: session.id,
+      title: session.session_name || 'Training Session',
+      coach: session.coach_name || 'Coach',
+      date: session.date || session.session_date,
+      time: session.start_time,
+      endTime: session.end_time,
+      location: session.location || session.address,
+      price: session.price,
+      sessionType: session.session_type,
+      studentsAttending: session.students_attending || 1,
+      description: session.description || ''
+    });
+    setShowSessionDetailsModal(true);
+  };
+
+  const handleCancelSession = (sessionId: string) => {
+    const session = sessions.find(s => s.id === sessionId);
+    if (session) {
+      Alert.alert(
+        'Cancel Session',
+        'Are you sure you want to cancel this session?',
+        [
+          { text: 'No', style: 'cancel' },
+          { 
+            text: 'Yes', 
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                const { data: sessionData, error } = await supabase.auth.getSession();
+                const accessToken = sessionData.session?.access_token;
+                if (!accessToken) {
+                  Alert.alert('Error', 'Authentication required');
+                  return;
+                }
+
+                const response = await cancelSession(accessToken, sessionId, session.date || session.session_date);
+                
+                if (response.success) {
+                  Alert.alert('Success', 'Session cancelled successfully');
+                  // Refresh sessions
+                  const dashboard = await getStudentDashboard(accessToken);
+                  setSessions(dashboard.sessions || []);
+                } else {
+                  Alert.alert('Error', response.message || 'Failed to cancel session');
+                }
+              } catch (error: any) {
+                console.error('Failed to cancel session:', error);
+                Alert.alert('Error', error.message || 'Failed to cancel session');
+              }
+            }
+          }
+        ]
+      );
+    }
+  };
+
+  // Handle class completion and show feedback modal
+  const handleClassCompletion = async (session: any) => {
+    try {
+      // Calculate total classes attended
+      const completedSessions = sessions.filter(s => 
+        s.session_status === 'completed' || s.status === 'completed'
+      );
+      const totalClasses = completedSessions.length + 1; // +1 for current session
+      
+      setFeedbackSession(session);
+      setTotalClassesAttended(totalClasses);
+      setShowClassFeedbackModal(true);
+      
+      // Clear active class
+      setActiveClass(null);
+    } catch (error) {
+      console.error('Error handling class completion:', error);
+    }
+  };
+
+  // Handle feedback submission
+  const handleFeedbackSubmit = async (rating: number, feedback: string) => {
+    try {
+      const { data: sessionData, error } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error('No access token found');
+
+      const response = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL || 'http://172.20.10.3:3000'}/api/student/submit-feedback`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          sessionId: feedbackSession?.session_id || feedbackSession?.id,
+          rating,
+          feedback,
+        }),
       });
-      // Set students data if available
-      setAutomaticClassStudents(activeClass.students || []);
-      setShowClassStartedModal(true);
+
+      if (!response.ok) {
+        throw new Error('Failed to submit feedback');
+      }
+
+      // Refresh sessions to update status
+      const dashboard = await getStudentDashboard(accessToken);
+      setSessions(dashboard.sessions || []);
+      
+    } catch (error) {
+      console.error('Error submitting feedback:', error);
+      throw error;
     }
   };
 
@@ -457,11 +715,34 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
             <Text style={styles.upcomingTitle}>Upcoming Class</Text>
             {sessions.length > 0 ? (
               (() => {
-                const session = sessions[0];
-                const startTime = new Date(session.start_time);
-                const endTime = new Date(session.end_time);
+                const session = getNextUpcomingClass();
+                
+                // Check if session exists
+                if (!session) {
+                  return (
+                    <Text style={{ padding: 16, color: '#6b7280' }}>No upcoming classes. Book your next session!</Text>
+                  );
+                }
+                
+                const sessionDate = session.date || session.session_date;
+                let startTimeStr = session.start_time;
+                let endTimeStr = session.end_time;
+                
+                // Handle datetime strings (extract time part for display)
+                if (startTimeStr && startTimeStr.includes('T')) {
+                  startTimeStr = startTimeStr.split('T')[1].split(':').slice(0, 2).join(':');
+                }
+                if (endTimeStr && endTimeStr.includes('T')) {
+                  endTimeStr = endTimeStr.split('T')[1].split(':').slice(0, 2).join(':');
+                }
+                
+                // Check if session is today (simple string comparison like coach)
                 const today = new Date();
-                const isToday = startTime.toDateString() === today.toDateString();
+                const isToday = sessionDate === today.toLocaleDateString('en-CA');
+                
+                // Use time strings directly for display (like coach)
+                const startTimeDisplay = startTimeStr || 'TBD';
+                const endTimeDisplay = endTimeStr || 'TBD';
                 return (
                   <>
                     {/* Confirmation Banner */}
@@ -496,7 +777,7 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
                         <View style={styles.infoRow}>
                           <Ionicons name="time-outline" size={16} color="#6b7280" />
                           <Text style={styles.infoText}>
-                            {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {startTimeDisplay} - {endTimeDisplay}
                           </Text>
                         </View>
                         <View style={styles.infoRow}>
@@ -509,10 +790,17 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
                         </View>
                       </View>
                       <View style={styles.buttonRow}>
-                        <TouchableOpacity style={styles.viewDetailsButton}>
+                        <TouchableOpacity 
+                          style={styles.viewDetailsButton}
+                          onPress={() => handleViewDetails(session)}
+                        >
+                          <Ionicons name="eye" size={16} color="#fb923c" />
                           <Text style={styles.viewDetailsText}>View Details</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.cancelButton}>
+                        <TouchableOpacity 
+                          style={styles.cancelButton}
+                          onPress={() => handleCancelSession(session.id)}
+                        >
                           <Text style={styles.cancelText}>Cancel Class</Text>
                         </TouchableOpacity>
                       </View>
@@ -572,16 +860,6 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
         </View>
       </ScrollView>
       
-      {/* Active Class Banner */}
-      {activeClass && (
-        <ActiveClassBanner
-          activeClass={activeClass}
-          onPress={handleBannerPress}
-          onEndClass={() => {}} // Students don't end classes
-        />
-      )}
-      {console.log('🔍 Student ActiveClassBanner render check:', { hasActiveClass: !!activeClass, activeClassId: activeClass?.id })}
-      
       {/* Chat Modal */}
       <ChatModal
         visible={!!selectedChatChannel}
@@ -608,6 +886,14 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
         }}
       />
 
+      {/* Student Active Class Banner */}
+      <StudentActiveClassBanner
+        visible={!!activeClass}
+        session={activeClass}
+        attendanceStatus={studentAttendanceStatus}
+        onPress={handleBannerPress}
+      />
+
       {/* Student Automatic Class Started Modal */}
       <StudentAutomaticClassStartedModal
         visible={showStudentAutomaticModal}
@@ -615,6 +901,139 @@ const StudentHomePage: React.FC<HomePageProps> = ({ navigation }) => {
         students={studentAutomaticClassStudents}
         currentStudentId={currentStudentId}
         onClose={() => setShowStudentAutomaticModal(false)}
+      />
+
+      {/* Session Details Modal */}
+      <Modal
+        visible={showSessionDetailsModal}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={() => setShowSessionDetailsModal(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Session Details</Text>
+            <TouchableOpacity
+              onPress={() => setShowSessionDetailsModal(false)}
+              style={styles.modalCloseButton}
+            >
+              <Ionicons name="close" size={24} color="#9ca3af" />
+            </TouchableOpacity>
+          </View>
+
+          {selectedSessionDetails && (
+            <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+              {/* Session Info Card */}
+              <View style={styles.modalCard}>
+                <View style={styles.modalCardHeader}>
+                  <Ionicons name="calendar" size={20} color="#fb923c" />
+                  <Text style={styles.modalCardTitle}>Session Information</Text>
+                </View>
+                <View style={styles.modalCardContent}>
+                  <Text style={styles.modalDetailText}>{selectedSessionDetails.session_name || selectedSessionDetails.sport}</Text>
+                  <Text style={styles.modalDetailSubtext}>
+                    {selectedSessionDetails.class_type === 'single' ? 'Individual Session' : 'Group Session'}
+                  </Text>
+                  <Text style={styles.modalDetailSubtext}>
+                    {new Date(selectedSessionDetails.date).toLocaleDateString('en-US', {
+                      weekday: 'long',
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    })}
+                  </Text>
+                  <Text style={styles.modalDetailSubtext}>
+                    {(() => {
+                      let startTime = selectedSessionDetails.start_time;
+                      let endTime = selectedSessionDetails.end_time;
+                      if (startTime && startTime.includes('T')) {
+                        startTime = startTime.split('T')[1].split(':').slice(0, 2).join(':');
+                      }
+                      if (endTime && endTime.includes('T')) {
+                        endTime = endTime.split('T')[1].split(':').slice(0, 2).join(':');
+                      }
+                      return `${startTime} - ${endTime}`;
+                    })()}
+                  </Text>
+                  <Text style={styles.modalDetailSubtext}>
+                    {selectedSessionDetails.location || selectedSessionDetails.address || 'N/A'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Coach Information */}
+              <View style={styles.modalCard}>
+                <View style={styles.modalCardHeader}>
+                  <Ionicons name="person" size={20} color="#fb923c" />
+                  <Text style={styles.modalCardTitle}>Coach Information</Text>
+                </View>
+                <View style={styles.modalCardContent}>
+                  <View style={styles.coachProfileRow}>
+                    <Image
+                      source={{ 
+                        uri: selectedSessionDetails.coach_profile || 'https://via.placeholder.com/100'
+                      }}
+                      style={styles.modalCoachAvatar}
+                      onError={() => {
+                        console.log('Failed to load coach profile picture');
+                      }}
+                    />
+                    <View style={styles.coachInfoModal}>
+                      <Text style={styles.modalCoachName}>{selectedSessionDetails.coach_name || 'Coach'}</Text>
+                      <Text style={styles.modalCoachEmail}>{selectedSessionDetails.coach_email || 'N/A'}</Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+
+              {/* Session Description */}
+              {selectedSessionDetails.description && (
+                <View style={styles.modalCard}>
+                  <View style={styles.modalCardHeader}>
+                    <Ionicons name="document-text" size={20} color="#fb923c" />
+                    <Text style={styles.modalCardTitle}>Description</Text>
+                  </View>
+                  <View style={styles.modalCardContent}>
+                    <Text style={styles.modalDetailText}>
+                      {selectedSessionDetails.description}
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              {/* Pricing Information */}
+              <View style={styles.modalCard}>
+                <View style={styles.modalCardHeader}>
+                  <Ionicons name="card" size={20} color="#fb923c" />
+                  <Text style={styles.modalCardTitle}>Pricing</Text>
+                </View>
+                <View style={styles.modalCardContent}>
+                  <Text style={styles.modalDetailText}>
+                    {selectedSessionDetails.price 
+                      ? `$${Math.round(selectedSessionDetails.price)} per session` 
+                      : 'Free session'
+                    }
+                  </Text>
+                  <Text style={styles.modalDetailSubtext}>
+                    Max Students: {selectedSessionDetails.max_students || 'N/A'}
+                  </Text>
+                  <Text style={styles.modalDetailSubtext}>
+                    Currently Enrolled: {selectedSessionDetails.students_attending || 0}
+                  </Text>
+                </View>
+              </View>
+            </ScrollView>
+          )}
+        </View>
+      </Modal>
+
+      {/* Student Class Feedback Modal */}
+      <StudentClassFeedbackModal
+        visible={showClassFeedbackModal}
+        session={feedbackSession}
+        totalClassesAttended={totalClassesAttended}
+        onSubmitFeedback={handleFeedbackSubmit}
+        onClose={() => setShowClassFeedbackModal(false)}
       />
       
       <BottomNavigation
@@ -824,15 +1243,21 @@ const styles = StyleSheet.create({
   },
   viewDetailsButton: {
     flex: 1,
-    backgroundColor: '#fb923c', // darker orange
-    paddingVertical: 12,
-    borderRadius: 8,
+    flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: '#374151',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#fb923c',
+    justifyContent: 'center',
   },
   viewDetailsText: {
-    color: 'white',
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '600',
+    color: '#fb923c',
+    marginLeft: 4,
   },
   cancelButton: {
     flex: 1,
@@ -938,6 +1363,148 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontStyle: 'italic',
     paddingVertical: 20,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContentOld: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    width: '90%',
+    maxHeight: '80%',
+    padding: 0,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1f2937',
+  },
+  modalBody: {
+    padding: 16,
+  },
+  sessionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1f2937',
+    marginBottom: 4,
+  },
+  sessionCoach: {
+    fontSize: 16,
+    color: '#6b7280',
+    marginBottom: 16,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  detailText: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginLeft: 8,
+  },
+  descriptionSection: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+  },
+  descriptionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 8,
+  },
+  descriptionText: {
+    fontSize: 14,
+    color: '#6b7280',
+    lineHeight: 20,
+  },
+  // New modal styles matching calendar format
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#18181b',
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  modalContent: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  modalCard: {
+    backgroundColor: '#27272a',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#374151',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  modalCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  modalCardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
+    marginLeft: 8,
+  },
+  modalCardContent: {
+    gap: 8,
+  },
+  modalDetailText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
+    marginBottom: 4,
+  },
+  modalDetailSubtext: {
+    fontSize: 14,
+    color: '#9ca3af',
+    marginBottom: 4,
+  },
+  coachProfileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  modalCoachAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    marginRight: 12,
+  },
+  coachInfoModal: {
+    flex: 1,
+  },
+  modalCoachName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
+    marginBottom: 2,
+  },
+  modalCoachEmail: {
+    fontSize: 14,
+    color: '#9ca3af',
   },
 });
 

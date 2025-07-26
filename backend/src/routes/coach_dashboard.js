@@ -69,7 +69,7 @@ router.get('/', verifySupabaseToken, async (req, res) => {
       const { data: studentSessions, error: studentSessionsError } = await supabase
         .from('Student_sessions')
         .select('student_id, student_status')
-        .eq('session_id', session.session_id);
+        .eq('id', session.unique_id);
 
       if (studentSessionsError || !studentSessions || studentSessions.length === 0) {
         return { ...session, students: [] };

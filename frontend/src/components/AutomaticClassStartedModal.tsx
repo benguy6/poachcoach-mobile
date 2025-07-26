@@ -43,7 +43,11 @@ const AutomaticClassStartedModal: React.FC<AutomaticClassStartedModalProps> = ({
   console.log('🔍 AutomaticClassStartedModal render:', {
     visible,
     hasSession: !!session,
-    studentsCount: students?.length || 0
+    studentsCount: students?.length || 0,
+    studentsData: students,
+    sessionData: session,
+    studentsType: typeof students,
+    studentsIsArray: Array.isArray(students)
   });
   const [attendance, setAttendance] = useState<{[key: string]: 'present' | 'absent'}>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -184,6 +188,8 @@ const AutomaticClassStartedModal: React.FC<AutomaticClassStartedModalProps> = ({
     }
   };
 
+
+
   if (!session) return null;
 
   return (
@@ -221,9 +227,14 @@ const AutomaticClassStartedModal: React.FC<AutomaticClassStartedModalProps> = ({
               Mark attendance for {students?.length || 0} student{(students?.length || 0) !== 1 ? 's' : ''}
             </Text>
 
-            <ScrollView style={styles.studentsList} showsVerticalScrollIndicator={false}>
-              {students?.map((student, index) => (
-                <View key={student.id} style={styles.studentCard}>
+                        <ScrollView style={styles.studentsList} showsVerticalScrollIndicator={false}>
+              <Text style={{ color: 'red', fontSize: 14, marginBottom: 10 }}>
+                Debug: Students count = {students?.length || 0}
+              </Text>
+              {students?.map((student, index) => {
+                console.log('🔍 Rendering student:', student);
+                return (
+                  <View key={student.id} style={styles.studentCard}>
                   <View style={styles.studentCardHeader}>
                     <View style={styles.studentProfileRow}>
                       <Image
@@ -251,9 +262,9 @@ const AutomaticClassStartedModal: React.FC<AutomaticClassStartedModalProps> = ({
                       styles.paymentStatusBadge,
                       student.paymentStatus === 'paid' ? styles.paidBadge : styles.unpaidBadge
                     ]}>
-                                              <Text style={[
-                          student.paymentStatus === 'paid' ? styles.paidStatusText : styles.unpaidStatusText
-                        ]}>
+                      <Text style={[
+                        student.paymentStatus === 'paid' ? styles.paidStatusText : styles.unpaidStatusText
+                      ]}>
                         {student.paymentStatus === 'paid' ? 'PAID' : 'UNPAID'}
                       </Text>
                     </View>
@@ -290,7 +301,8 @@ const AutomaticClassStartedModal: React.FC<AutomaticClassStartedModalProps> = ({
                     </View>
                   </View>
                 </View>
-              ))}
+              );
+            })}
             </ScrollView>
           </View>
 
@@ -547,6 +559,7 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     marginBottom: 8,
   },
+
 });
 
 export default AutomaticClassStartedModal; 

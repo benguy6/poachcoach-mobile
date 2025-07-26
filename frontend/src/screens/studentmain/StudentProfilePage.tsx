@@ -31,7 +31,7 @@ import * as ImagePicker from 'expo-image-picker';
 import DropDownPicker from "react-native-dropdown-picker";
 import Slider from "@react-native-community/slider";
 import { uploadProfilePicture, getStudentProfile } from '../../services/api'; // Adjust path as needed
-import { useRoute, RouteProp, useNavigation } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../../services/supabase'; // Correct import path
 
 type Achievement = {
@@ -53,23 +53,15 @@ type UserProfile = {
   address?: string;
 };
 
-type ProfilePageProps = {
-  onSettings: () => void;
-};
+type ProfilePageProps = {};
 
-type StudentProfilePageRouteParams = {
-  onProfilePicChange?: (url: string) => void;
-};
-
-const StudentProfilePage: React.FC<ProfilePageProps> = ({ onSettings }) => {
+const StudentProfilePage: React.FC<ProfilePageProps> = () => {
   const [profilePic, setProfilePic] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [loading, setLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
-  const route = useRoute<RouteProp<{ params: StudentProfilePageRouteParams }, 'params'>>();
   const navigation = useNavigation();
-  const onProfilePicChange = route.params?.onProfilePicChange;
 
   // Edit form states
   const [editForm, setEditForm] = useState({
@@ -149,10 +141,6 @@ const StudentProfilePage: React.FC<ProfilePageProps> = ({ onSettings }) => {
       try {
         const uploadedUrl = await uploadProfilePicture(result.assets[0].uri);
         setProfilePic(uploadedUrl);
-        if (onProfilePicChange) {
-          console.log('Profile picture updated:', uploadedUrl); // Debugging log
-          onProfilePicChange(uploadedUrl); // Invoke the callback to update the dashboard
-        }
       } catch (e) {
         console.error('Upload error:', e);
         alert('Failed to upload image');
@@ -348,7 +336,6 @@ const StudentProfilePage: React.FC<ProfilePageProps> = ({ onSettings }) => {
       <Modal
         visible={showEditModal}
         animationType="slide"
-        presentationStyle="pageSheet"
         onRequestClose={() => setShowEditModal(false)}
       >
         <KeyboardAvoidingView 
@@ -358,83 +345,88 @@ const StudentProfilePage: React.FC<ProfilePageProps> = ({ onSettings }) => {
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Edit Profile</Text>
             <TouchableOpacity onPress={() => setShowEditModal(false)}>
-              <X size={24} color="#F97316" />
+              <X size={24} color="#ffffff" />
             </TouchableOpacity>
           </View>
           
-          <FlatList
-            style={styles.modalContent}
-            data={[{ key: 'form' }]}
-            renderItem={() => (
-              <View style={styles.formSection}>
-                <Text style={styles.sectionTitle}>Personal Information</Text>
-                
-                <View style={styles.nameRow}>
-                  <TextInput
-                    style={[styles.input, { flex: 1, marginRight: 8 }]}
-                    placeholder="First Name"
-                    placeholderTextColor="#666"
-                    value={editForm.first_name}
-                    onChangeText={(text) => setEditForm(prev => ({ ...prev, first_name: text }))}
-                  />
-                  <TextInput
-                    style={[styles.input, { flex: 1, marginLeft: 8 }]}
-                    placeholder="Last Name"
-                    placeholderTextColor="#666"
-                    value={editForm.last_name}
-                    onChangeText={(text) => setEditForm(prev => ({ ...prev, last_name: text }))}
-                  />
-                </View>
-
-                <Text style={styles.label}>Gender</Text>
-                <DropDownPicker
-                  open={openGender}
-                  value={editForm.gender}
-                  items={genderItems}
-                  setOpen={setOpenGender}
-                  setValue={setEditForm}
-                  setItems={setGenderItems}
-                  style={styles.dropdown}
-                  dropDownContainerStyle={styles.dropdownContainer}
-                  zIndex={3000}
-                  zIndexInverse={1000}
-                />
-
-                <Text style={styles.label}>Age: {editForm.age}</Text>
-                <Slider
-                  style={{ width: "100%", height: 40 }}
-                  minimumValue={1}
-                  maximumValue={100}
-                  step={1}
-                  minimumTrackTintColor="#F97316"
-                  maximumTrackTintColor="#666"
-                  thumbTintColor="#F97316"
-                  value={Number(editForm.age)}
-                  onValueChange={(value) => setEditForm(prev => ({ ...prev, age: String(value) }))}
-                />
-
+          <View style={styles.modalContent}>
+            <View style={styles.formSection}>
+              <Text style={styles.sectionTitle}>Personal Information</Text>
+              
+              <Text style={styles.label}>Full Name</Text>
+              <View style={styles.nameRow}>
                 <TextInput
-                  style={styles.input}
-                  placeholder="Phone Number"
+                  style={[styles.input, { flex: 1, marginRight: 12 }]}
+                  placeholder="First Name"
                   placeholderTextColor="#666"
-                  value={editForm.number}
-                  onChangeText={(text) => setEditForm(prev => ({ ...prev, number: text }))}
-                  keyboardType="phone-pad"
+                  value={editForm.first_name}
+                  onChangeText={(text) => setEditForm(prev => ({ ...prev, first_name: text }))}
                 />
-
                 <TextInput
-                  style={styles.input}
-                  placeholder="Postal Code"
+                  style={[styles.input, { flex: 1, marginLeft: 12 }]}
+                  placeholder="Last Name"
                   placeholderTextColor="#666"
-                  value={editForm.postal_code}
-                  onChangeText={(text) => setEditForm(prev => ({ ...prev, postal_code: text }))}
-                  keyboardType="numeric"
+                  value={editForm.last_name}
+                  onChangeText={(text) => setEditForm(prev => ({ ...prev, last_name: text }))}
                 />
               </View>
-            )}
-            keyExtractor={(item) => item.key}
-            showsVerticalScrollIndicator={false}
-          />
+
+              <View style={styles.fieldSpacer} />
+
+              <Text style={styles.label}>Gender</Text>
+              <DropDownPicker
+                open={openGender}
+                value={editForm.gender}
+                items={genderItems}
+                setOpen={setOpenGender}
+                setValue={setEditForm}
+                setItems={setGenderItems}
+                style={styles.dropdown}
+                dropDownContainerStyle={styles.dropdownContainer}
+                zIndex={3000}
+                zIndexInverse={1000}
+              />
+
+              <View style={styles.fieldSpacer} />
+
+              <Text style={styles.label}>Age: {editForm.age}</Text>
+              <Slider
+                style={{ width: "100%", height: 40, marginVertical: 8 }}
+                minimumValue={1}
+                maximumValue={100}
+                step={1}
+                minimumTrackTintColor="#F97316"
+                maximumTrackTintColor="#666"
+                thumbTintColor="#F97316"
+                value={Number(editForm.age)}
+                onValueChange={(value) => setEditForm(prev => ({ ...prev, age: String(value) }))}
+              />
+
+              <View style={styles.fieldSpacer} />
+
+              <Text style={styles.label}>Phone Number</Text>
+              <TextInput
+                style={[styles.input, styles.fullWidthInput]}
+                placeholder="Enter your phone number"
+                placeholderTextColor="#666"
+                value={editForm.number}
+                onChangeText={(text) => setEditForm(prev => ({ ...prev, number: text }))}
+                keyboardType="phone-pad"
+              />
+
+              <View style={styles.fieldSpacer} />
+
+              <Text style={styles.label}>Postal Code</Text>
+              <TextInput
+                style={[styles.input, styles.fullWidthInput]}
+                placeholder="Enter your postal code"
+                placeholderTextColor="#666"
+                value={editForm.postal_code}
+                onChangeText={(text) => setEditForm(prev => ({ ...prev, postal_code: text }))}
+                keyboardType="numeric"
+              />
+            </View>
+          </View>
 
           <View style={styles.modalFooter}>
             <TouchableOpacity 
@@ -661,94 +653,118 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     paddingTop: 64,
-    paddingBottom: 20,
+    paddingBottom: 24,
     backgroundColor: '#F97316',
   },
   modalTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 22,
+    fontWeight: '700',
     color: 'white',
   },
   modalContent: {
-    padding: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 20,
   },
   formSection: {
     backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 24,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 12,
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 20,
+    color: '#F97316',
   },
   nameRow: {
     flexDirection: 'row',
-    marginBottom: 12,
+    marginBottom: 20,
   },
   input: {
     flex: 1,
     backgroundColor: '#F0F2F5',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
     color: '#333',
   },
   label: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#666',
-    marginBottom: 4,
+    marginBottom: 8,
+    fontWeight: '600',
   },
   dropdown: {
     backgroundColor: '#F0F2F5',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
     color: '#333',
+    marginBottom: 20,
   },
   dropdownContainer: {
     backgroundColor: '#F0F2F5',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
     color: '#333',
   },
   modalFooter: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingVertical: 20,
-    paddingHorizontal: 20,
+    justifyContent: 'space-between',
+    paddingVertical: 24,
+    paddingHorizontal: 24,
     backgroundColor: '#F0F2F5',
     borderTopWidth: 1,
     borderTopColor: '#E0E0E0',
   },
   cancelButton: {
     backgroundColor: '#6B7280',
-    paddingVertical: 12,
-    paddingHorizontal: 30,
-    borderRadius: 28,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    flex: 0.48,
+    alignItems: 'center',
   },
   cancelButtonText: {
     color: 'white',
-    fontWeight: 'bold',
+    fontWeight: '700',
     fontSize: 16,
   },
   saveButton: {
     backgroundColor: '#F97316',
-    paddingVertical: 12,
-    paddingHorizontal: 30,
-    borderRadius: 28,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    flex: 0.48,
+    alignItems: 'center',
   },
   saveButtonText: {
     color: 'white',
-    fontWeight: 'bold',
+    fontWeight: '700',
     fontSize: 16,
+  },
+  fullWidthInput: {
+    width: '100%',
+    flex: undefined,
+  },
+  fieldSpacer: {
+    height: 16,
   },
 });
 

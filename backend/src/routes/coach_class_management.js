@@ -240,18 +240,30 @@ router.post('/end-class', verifySupabaseToken, async (req, res) => {
     console.log('Coach ID:', coachId);
     console.log('Unique ID:', uniqueId);
 
+    // Debug: Check if session exists with this unique_id
+    const { data: debugSession, error: debugError } = await supabase
+      .from('Sessions')
+      .select('unique_id, session_id, coach_id, session_status')
+      .eq('unique_id', uniqueId);
+    
+    console.log('Debug - Sessions with unique_id:', debugSession);
+    console.log('Debug - Error:', debugError);
+
     // Verify the session belongs to this coach and is in progress
     const { data: session, error: sessionError } = await supabase
       .from('Sessions')
       .select('unique_id, session_id, coach_id, session_status, sport, date, start_time, end_time, price_per_session')
       .eq('unique_id', uniqueId)
       .eq('coach_id', coachId)
-      .eq('session_status', 'in_progress')
+      .in('session_status', ['confirmed', 'in_progress'])
       .single();
 
     if (sessionError || !session) {
       console.error('Session verification error:', sessionError);
-      return res.status(404).json({ error: 'Session not found or not in progress' });
+      return res.status(404).json({ 
+        error: 'Session not found or not in progress',
+        details: sessionError?.message || 'No session found with the provided unique ID'
+      });
     }
 
     console.log('Found session:', session);
@@ -618,7 +630,7 @@ router.post('/update-session-status', verifySupabaseToken, async (req, res) => {
     const { data: session, error: sessionError } = await supabase
       .from('Sessions')
       .select('*')
-      .eq('session_id', sessionId)
+      .eq('unique_id', sessionId)
       .eq('coach_id', coachId)
       .single();
 
@@ -631,7 +643,7 @@ router.post('/update-session-status', verifySupabaseToken, async (req, res) => {
     const { error: updateError } = await supabase
       .from('Sessions')
       .update({ session_status: status })
-      .eq('session_id', sessionId);
+      .eq('unique_id', sessionId);
 
     if (updateError) {
       console.error('Error updating session status:', updateError);

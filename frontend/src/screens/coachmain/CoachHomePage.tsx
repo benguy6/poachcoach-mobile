@@ -141,7 +141,8 @@ const CoachHomePage = ({ navigation }: CoachHomePageProps) => {
           startTime: currentlyRunningClass.start_time,
           endTime: currentlyRunningClass.end_time || currentlyRunningClass.endTime,
           hasStudents: !!currentlyRunningClass.students,
-          studentsData: currentlyRunningClass.students || []
+          studentsData: currentlyRunningClass.students || [],
+          fullSessionData: currentlyRunningClass
         });
         
         setActiveClass({
@@ -173,6 +174,7 @@ const CoachHomePage = ({ navigation }: CoachHomePageProps) => {
         setCoach(data.coach);
         setSessions(data.confirmedSessions);
         console.log('🔍 Dashboard fetched, sessions:', data.confirmedSessions?.length || 0);
+        console.log('🔍 Full dashboard response:', data);
         
         // Debug: Check if sessions have students
         if (data.confirmedSessions && data.confirmedSessions.length > 0) {
@@ -577,9 +579,13 @@ const CoachHomePage = ({ navigation }: CoachHomePageProps) => {
     // Show the class started modal when banner is clicked
     if (activeClass) {
       console.log('🔍 Banner pressed - Active class data:', {
-        sessionId: activeClass.session?.unique_id || activeClass.session?.id,
+        sessionUniqueId: activeClass.session?.unique_id || activeClass.session?.id,
         studentsCount: activeClass.session?.students?.length || 0,
-        students: activeClass.session?.students || []
+        students: activeClass.session?.students || [],
+        sessionData: activeClass.session,
+        sessionUniqueIdField: activeClass.session?.unique_id,
+        sessionIdField: activeClass.session?.session_id,
+        sessionIdField2: activeClass.session?.id
       });
       
       setAutomaticClassSession(activeClass.session);
@@ -903,19 +909,6 @@ const CoachHomePage = ({ navigation }: CoachHomePageProps) => {
                   </Text>
                 </View>
               </View>
-              
-              {/* Temporary debug button */}
-              <TouchableOpacity 
-                style={[styles.redBtn, { marginTop: 10 }]}
-                onPress={() => {
-                  console.log('🔍 Manual trigger of automatic class modal');
-                  setAutomaticClassSession(nextUpcomingClass);
-                  setAutomaticClassStudents(nextUpcomingClass.students || []);
-                  setShowAutomaticClassModal(true);
-                }}
-              >
-                <Text style={styles.btnText}>Test Modal</Text>
-              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -1200,16 +1193,27 @@ const CoachHomePage = ({ navigation }: CoachHomePageProps) => {
       )}
 
       {/* Automatic Class Started Modal */}
-      <AutomaticClassStartedModal
-        visible={showAutomaticClassModal}
-        onClose={() => {
-          console.log('🔍 Closing automatic class modal');
-          setShowAutomaticClassModal(false);
-        }}
-        onEndClass={handleEndClass}
-        session={automaticClassSession}
-        students={automaticClassStudents}
-      />
+      {showAutomaticClassModal && (
+        <AutomaticClassStartedModal
+          visible={showAutomaticClassModal}
+          onClose={() => {
+            console.log('🔍 Closing automatic class modal');
+            setShowAutomaticClassModal(false);
+          }}
+          onEndClass={handleEndClass}
+          session={automaticClassSession}
+          students={automaticClassStudents}
+        />
+      )}
+      
+      {/* Debug info */}
+      {showAutomaticClassModal && (
+        <View style={{ position: 'absolute', top: 100, left: 20, backgroundColor: 'rgba(0,0,0,0.8)', padding: 10, borderRadius: 5 }}>
+          <Text style={{ color: 'white', fontSize: 12 }}>
+            Modal Props: Session={!!automaticClassSession}, Students={automaticClassStudents?.length || 0}
+          </Text>
+        </View>
+      )}
     </SafeAreaView>
   );
 };
@@ -1657,22 +1661,22 @@ const styles = StyleSheet.create({
   },
   countdownContainer: {
     backgroundColor: '#f97316',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 6,
+      height: 4,
     },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 12,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   countdownText: {
     color: '#ffffff',
-    fontSize: 24,
-    fontWeight: '800',
+    fontSize: 16,
+    fontWeight: '700',
     textAlign: 'center',
   },
 });

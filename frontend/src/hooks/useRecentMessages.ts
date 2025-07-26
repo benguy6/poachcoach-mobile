@@ -12,7 +12,7 @@ interface RecentMessage {
   channelId: string;
 }
 
-export const useRecentMessages = (maxMessages: number = 3) => {
+export const useRecentMessages = (maxMessages: number = 3, refreshKey: number = 0) => {
   const [messages, setMessages] = useState<RecentMessage[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -122,10 +122,7 @@ export const useRecentMessages = (maxMessages: number = 3) => {
     };
 
     fetchRecentMessages();
-  }, [streamChatClient?.userID, maxMessages]);
+  }, [streamChatClient?.userID, maxMessages, refreshKey]);
 
-  return { messages, loading, refetch: () => {
-    setLoading(true);
-    // Re-trigger the effect by updating a dependency
-  }};
+    return { messages, loading };
 }; 

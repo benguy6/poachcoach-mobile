@@ -28,31 +28,15 @@ router.get('/', verifySupabaseToken, async (req, res) => {
     }
 
     // Fetch completed sessions
-    const { data: completedSessions, error: csError } = await supabase
+    const { data: sessions, error: csError } = await supabase
       .from('Student_sessions')
-      .select('session_id')
+      .select('session_id, session_date, start_time, end_time, topic, coach_id')
       .eq('student_id', userId)
-      .eq('student_status', 'attended');
+      .eq('student_status', 'attended')
+      .order('session_date', { ascending: true });
 
     if (csError) {
       return res.status(500).json({ error: 'Failed to fetch completed sessions' });
-    }
-
-    const completedSessionIds = completedSessions.map(row => row.session_id);
-
-    let sessions = [];
-    if (completedSessionIds.length > 0) {
-      const { data: sessionData, error: sessionError } = await supabase
-        .from('Sessions')
-        .select('id, start_time, end_time, topic, coach_id')
-        .in('id', completedSessionIds)
-        .order('start_time', { ascending: true });
-
-      if (sessionError) {
-        return res.status(500).json({ error: 'Failed to fetch session details' });
-      }
-
-      sessions = sessionData;
     }
 
     // Fetch achievements
@@ -83,11 +67,12 @@ router.get('/', verifySupabaseToken, async (req, res) => {
         favouriteActivities: favouriteActivities.map(fa => fa.activity),
       },
       sessions: sessions.map(session => ({
-        id: session.id,
+        id: session.session_id,
         startTime: session.start_time,
         endTime: session.end_time,
         topic: session.topic,
         coachId: session.coach_id,
+        date: session.session_date,
       })),
       achievements: achievements.map(achievement => ({
         id: achievement.id,

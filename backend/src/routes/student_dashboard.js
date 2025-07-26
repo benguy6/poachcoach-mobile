@@ -157,8 +157,8 @@ router.get('/', verifySupabaseToken, async (req, res) => {
           session_name: session.sport || 'Training Session',
           coach_name: coach ? `${coach.first_name} ${coach.last_name}`.trim() : 'Coach',
           coach_profile: coach?.profile_picture || null,
-          start_time: `${session.date}T${session.start_time}:00`, // Full datetime format
-          end_time: `${session.date}T${session.end_time}:00`, // Full datetime format
+          start_time: session.start_time, // Just the time part
+          end_time: session.end_time, // Just the time part
           date: session.date,
           day: session.day,
           location: session.address || 'TBD',
@@ -593,24 +593,23 @@ router.post('/active-class-students', verifySupabaseToken, async (req, res) => {
 // POST /student/submit-feedback - Submit student feedback
 router.post('/submit-feedback', verifySupabaseToken, async (req, res) => {
   const userId = req.user.id;
-  const { sessionId, coachRating, classRating, feedback } = req.body;
+  const { sessionId, rating, feedback } = req.body;
 
   try {
     console.log('=== STUDENT FEEDBACK SUBMISSION ===');
     console.log('User ID:', userId);
     console.log('Session ID:', sessionId);
-    console.log('Coach Rating:', coachRating);
-    console.log('Class Rating:', classRating);
+    console.log('Rating:', rating);
+    console.log('Feedback:', feedback);
 
-    // Store feedback in database (you'll need to create a feedback table)
+    // Store feedback in database
     const { error: feedbackError } = await supabase
       .from('Student_Feedback')
       .insert({
         student_id: userId,
         session_id: sessionId,
-        coach_rating: coachRating,
-        class_rating: classRating,
-        feedback_text: feedback,
+        coach_rating: rating,
+        feedback_text: feedback || '',
         created_at: new Date().toISOString()
       });
 

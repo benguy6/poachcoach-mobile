@@ -165,27 +165,7 @@ const StudentTabs = () => {
         <Tab.Screen name="StudentWallet" component={StudentWalletPage} />
         <Tab.Screen
           name="StudentProfile"
-          children={(props) => (
-            <StudentProfilePage
-              {...props}
-              userProfile={{
-                name: "Vansh Puri",
-                email: "vansh@example.com",
-                level: "Beginner",
-                location: "Delhi",
-                totalClasses: 0,
-                phone: "1234567890",
-                profilePicture: "",
-                bio: "",
-                joinDate: "January 2024",
-                goals: "Improve fitness and learn new skills",
-                favoriteActivities: ["Yoga", "Running", "Swimming"],
-              }}
-              achievements={[]}
-              onEdit={() => console.log("Edit profile")}
-              onSettings={() => props.navigation.navigate("StudentSettings")}
-            />
-          )}
+          component={StudentProfilePage}
         />
       </Tab.Navigator>
     </>
